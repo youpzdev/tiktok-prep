@@ -70,9 +70,14 @@
         <span>BY&nbsp;YOUPZDEV</span>
       </div>
     </a>
-    <div class="engine" id="engine">
-      <span class="engine-dot"></span>
-      <span class="engine-text" id="engine-text">ENGINE&nbsp;CHECK…</span>
+    <div class="top-right">
+      <div class="seg lang" id="lang">
+        <button data-lang="ru">RU</button><button data-lang="en">EN</button>
+      </div>
+      <div class="engine" id="engine">
+        <span class="engine-dot"></span>
+        <span class="engine-text" id="engine-text">ENGINE&nbsp;CHECK…</span>
+      </div>
     </div>
   </header>
 
@@ -81,11 +86,11 @@
       <span class="line">UNIQUE&nbsp;VS</span>
       <span class="line line-2">TIKTOK&nbsp;<svg class="arr" viewBox="0 0 24 24"><path d="M17 7 L7 17 M7 9 v8 h8" stroke-width="2.2" fill="none"/></svg></span>
     </h1>
-    <p class="hero-sub">Лёгкая компрессия + патч MP4-контейнера — размер меньше, качество почти без потерь.<br>
+    <p class="hero-sub" data-i18n="hero_sub">Лёгкая компрессия + патч MP4-контейнера — размер меньше, качество почти без потерь.<br>
     Обходит автодетект повторного контента: меняет фингерпринт, счётчик кадров и метаданные.</p>
     <div class="hero-chips">
-      <span class="chip">СЖАТИЕ ~5×</span><span class="chip">РАЗДУВ КАДРОВ ×10</span>
-      <span class="chip">НОВЫЙ ФИНГЕРПРИНТ</span><span class="chip">FASTSTART</span>
+      <span class="chip" data-i18n="chip_1">СЖАТИЕ ~5×</span><span class="chip" data-i18n="chip_2">РАЗДУВ КАДРОВ ×10</span>
+      <span class="chip" data-i18n="chip_3">НОВЫЙ ФИНГЕРПРИНТ</span><span class="chip">FASTSTART</span>
     </div>
   </section>
 
@@ -97,11 +102,11 @@
         <path d="M32 42 V14 M22 24 L32 14 L42 24" stroke-width="2.5"/>
         <path d="M12 42 v8 a4 4 0 0 0 4 4 h32 a4 4 0 0 0 4-4 v-8" stroke-width="2.5"/>
       </svg>
-      <div class="dz-title">Перетащите видео сюда</div>
-      <div class="dz-hint">MP4 на выходе · MOV · MKV · WEBM на входе — загрузи и жми START</div>
+      <div class="dz-title" data-i18n="dz_title">Перетащите видео сюда</div>
+      <div class="dz-hint" data-i18n="dz_hint">MP4 на выходе · MOV · MKV · WEBM на входе — загрузи и жми START</div>
       <div class="dz-actions">
-        <button class="btn btn-ghost" id="btn-files"><i>⊞</i>Выбрать файлы</button>
-        <button class="btn btn-ghost" id="btn-folder"><i>▤</i>Папка целиком</button>
+        <button class="btn btn-ghost" id="btn-files"><i>⊞</i><span data-i18n="dz_files">Выбрать файлы</span></button>
+        <button class="btn btn-ghost" id="btn-folder"><i>▤</i><span data-i18n="dz_folder">Папка целиком</span></button>
       </div>
       <div class="dz-upload" id="dz-upload" hidden>
         <div class="dz-upload-bar"><span id="dz-upload-fill"></span></div>
@@ -113,20 +118,20 @@
   <!-- ================= how it works ================= -->
   <section class="glass method">
     <div class="panel-head">
-      <span class="panel-title">ЧТО&nbsp;ДЕЛАЕТ&nbsp;ПАТЧ</span>
-      <span class="panel-note mono">сначала компрессия, затем патч</span>
+      <span class="panel-title" data-i18n="method_title">ЧТО&nbsp;ДЕЛАЕТ&nbsp;ПАТЧ</span>
+      <span class="panel-note mono" data-i18n="method_note">сначала компрессия, затем патч</span>
     </div>
     <ol class="method-list">
-      <li><b>Компрессия.</b> Даунскейл во вписывание в кадр TikTok (до 1080p) + x264 CRF&nbsp;22, VBV&nbsp;15&nbsp;Мбит/с, аудио AAC&nbsp;48&nbsp;кГц — размер падает в разы, качество почти без потерь.</li>
-      <li><b>Раздувание счётчика кадров.</b> Дописываются фиктивные сэмплы, таблицы <span class="mono">stsz / stts / stsc / stco</span> пересчитываются — контейнер показывает ×10 кадров, реальные данные целы.</li>
-      <li><b>Чистка отпечатка.</b> Обнуляется <span class="mono">compressorname</span>, метаданные переписываются под новый уникальный ID — хэш и фингерпринт меняются.</li>
+      <li data-i18n="method_1"><b>Компрессия.</b> Даунскейл во вписывание в кадр TikTok (до 1080p) + x264 CRF&nbsp;22, VBV&nbsp;15&nbsp;Мбит/с, аудио AAC&nbsp;48&nbsp;кГц — размер падает в разы, качество почти без потерь.</li>
+      <li data-i18n="method_2"><b>Раздувание счётчика кадров.</b> Дописываются фиктивные сэмплы, таблицы <span class="mono">stsz / stts / stsc / stco</span> пересчитываются — контейнер показывает ×10 кадров, реальные данные целы.</li>
+      <li data-i18n="method_3"><b>Чистка отпечатка.</b> Обнуляется <span class="mono">compressorname</span>, метаданные переписываются под новый уникальный ID — хэш и фингерпринт меняются.</li>
     </ol>
   </section>
 
   <!-- ================= queue ================= -->
   <section class="queue-wrap" id="queue-wrap" hidden>
     <div class="queue-head">
-      <span class="panel-title">ОЧЕРЕДЬ&nbsp;<span class="mono" id="queue-count">0</span></span>
+      <span class="panel-title"><span data-i18n="queue_title">ОЧЕРЕДЬ</span>&nbsp;<span class="mono" id="queue-count">0</span></span>
       <div class="queue-actions">
         <button class="btn btn-ghost btn-sm" id="btn-clear">Очистить</button>
         <button class="btn btn-primary" id="btn-start">
@@ -136,15 +141,18 @@
     </div>
     <div class="queue" id="queue"></div>
     <div class="queue-summary glass" id="summary" hidden>
-      <div class="sum-item"><em>ПРОПАТЧЕНО</em><b id="sum-count">0</b></div>
-      <div class="sum-item"><em>КАДРОВ БЫЛО</em><b id="sum-before">—</b></div>
-      <div class="sum-item"><em>СТАЛО</em><b id="sum-after">—</b></div>
-      <div class="sum-item sum-accent"><em>РАЗДУВ</em><b id="sum-saved">—</b></div>
+      <div class="sum-item"><em data-i18n="sum_count">ПРОПАТЧЕНО</em><b id="sum-count">0</b></div>
+      <div class="sum-item"><em data-i18n="sum_before">КАДРОВ БЫЛО</em><b id="sum-before">—</b></div>
+      <div class="sum-item"><em data-i18n="sum_after">СТАЛО</em><b id="sum-after">—</b></div>
+      <div class="sum-item sum-accent"><em data-i18n="sum_saved">РАЗДУВ</em><b id="sum-saved">—</b></div>
     </div>
   </section>
 
   <footer class="foot">
-    <span class="mono">TIKTOK&nbsp;PREP&nbsp;·&nbsp;BY&nbsp;<a class="credit" href="https://t.me/youpzlabnsfw" target="_blank" rel="noopener">YOUPZDEV</a>&nbsp;·&nbsp;COMPRESS&nbsp;+&nbsp;MP4&nbsp;PATCH</span>
+    <span class="mono" data-i18n="foot_left">TIKTOK&nbsp;PREP&nbsp;·&nbsp;СЖАТИЕ&nbsp;+&nbsp;ПАТЧ&nbsp;MP4</span>
+    <span class="mono foot-right">
+      BY&nbsp;YOUPZDEV&nbsp;·&nbsp;<a class="credit" href="https://t.me/youpzlabnsfw" target="_blank" rel="noopener">TELEGRAM</a>&nbsp;·&nbsp;<a class="credit" href="https://www.tiktok.com/@youpzdev" target="_blank" rel="noopener">TIKTOK</a>
+    </span>
     <span class="mono" id="foot-engine"></span>
   </footer>
 
