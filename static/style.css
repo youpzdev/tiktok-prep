@@ -153,7 +153,12 @@ body{
 }
 
 /* header */
-.top{display:flex;justify-content:space-between;align-items:center}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.top-right{display:flex;align-items:center;gap:10px}
+.lang{padding:2px;flex:0 0 auto}
+.lang button{
+  flex:0 0 auto;padding:7px 11px;font-size:9.5px;letter-spacing:.18em;
+}
 .brand{display:flex;align-items:center;gap:14px;text-decoration:none;color:inherit;transition:opacity .2s}
 .brand:hover{opacity:.85}
 .brand-logo{
@@ -485,6 +490,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.18)}
 }
 .credit{color:var(--dim);text-decoration:none;border-bottom:1px solid var(--line);transition:color .2s}
 .credit:hover{color:var(--ink)}
+.foot-right{white-space:nowrap}
 
 /* toast */
 .toast{
@@ -506,6 +512,10 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.18)}
   .stage-word{display:none}
   .hide-sm{display:none}
   .page{padding:24px 18px 100px}
+  /* шапка: логотип + язык, бейдж движка уезжает (он дублируется в футере) */
+  .top{flex-wrap:wrap}
+  .top-right .engine{display:none}
+  .brand-name b{font-size:12px}
 }
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}

@@ -1,9 +1,13 @@
+**Русский** · [English](README.en.md)
+
 # TikTok Prep Tool
 
 Локальная подготовка видео под TikTok: лёгкое сжатие + патч MP4-контейнера.
 Качество не шакалится, каждый файл уникален для антиплагиата.
 
-**by [youpzdev](https://t.me/youpzlabnsfw)** · Python stdlib + ffmpeg · без облака и телеметрии
+Python stdlib + ffmpeg · без облака и телеметрии
+
+**by youpzdev** — [Telegram](https://t.me/youpzlabnsfw) · [TikTok](https://www.tiktok.com/@youpzdev)
 
 ---
 
@@ -110,5 +114,9 @@ Python-зависимостей нет вообще — только станд�
 
 > ⚠️ Это гонка брони и снаряда. Сегодня приём работает, но TikTok свои алгоритмы
 > периодически докручивает — вечных гарантий тут не даёт никто.
+
+## 📄 Лицензия
+
+Проект распространяется по лицензии [MIT](LICENSE). Copyright © 2026 youpzdev.
 
 #оффтоп
