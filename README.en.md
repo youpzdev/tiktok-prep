@@ -118,6 +118,25 @@ external servers.
 > ⚠️ This is an arms race. The trick works today, but TikTok keeps tuning its
 > algorithms — nobody can promise it lasts forever.
 
+## 🔎 Keywords and tags
+
+TikTok Prep Tool is a free local video optimizer for preparing and uploading
+TikTok videos while preserving quality. It processes MP4, 4K, Full HD,
+vertical videos, edits, clips, Shorts, and Reels locally with FFmpeg.
+
+`TikTok` · `Tik Tok` · `TikTok video` · `TikTok video optimizer` ·
+`TikTok quality` · `TikTok upload quality` · `TikTok video quality` ·
+`improve TikTok quality` · `preserve video quality` · `TikTok 4K` ·
+`TikTok 60 FPS` · `TikTok Full HD` · `1080p TikTok` · `vertical video` ·
+`prepare video for TikTok` · `video optimization` · `video compression` ·
+`quality-preserving video compression` · `video compressor` ·
+`video transcoder` · `MP4 optimizer` · `MP4 metadata` · `FFmpeg` ·
+`Python video tool` · `local video processing` · `offline video tool` ·
+`TikTok edits` · `TikTok clips` · `TikTok content creator` ·
+`TikTok uploader` · `TikTok compression fix` · `TikTok quality fix` ·
+`TikTok duplicate content` · `unique video` · `video fingerprint` ·
+`YouTube Shorts` · `Instagram Reels`
+
 ## 📄 License
 
 This project is distributed under a [non-commercial license](LICENSE). Personal,
