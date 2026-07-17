@@ -118,6 +118,24 @@ Python-зависимостей нет вообще — только станд�
 > ⚠️ Это гонка брони и снаряда. Сегодня приём работает, но TikTok свои алгоритмы
 > периодически докручивает — вечных гарантий тут не даёт никто.
 
+## 🔎 Ключевые слова и теги
+
+TikTok Prep Tool — бесплатный локальный оптимизатор видео для подготовки и
+загрузки роликов в TikTok с сохранением качества. Подходит для обработки MP4,
+4K, Full HD и вертикальных видео, эдитов, клипов, Shorts и Reels через FFmpeg.
+
+`TikTok` · `Tik Tok` · `тикток` · `тикток видео` · `TikTok video optimizer` ·
+`TikTok quality` · `TikTok upload quality` · `TikTok video quality` ·
+`улучшить качество TikTok` · `сохранить качество видео` · `TikTok 4K` ·
+`TikTok 60 FPS` · `TikTok Full HD` · `1080p TikTok` · `вертикальное видео` ·
+`подготовка видео для TikTok` · `оптимизация видео` · `сжатие видео` ·
+`сжатие с сохранением качества` · `video compressor` · `video transcoder` ·
+`MP4 optimizer` · `MP4 metadata` · `FFmpeg` · `Python video tool` ·
+`локальная обработка видео` · `без облака` · `TikTok edits` · `TikTok clips` ·
+`TikTok content creator` · `TikTok uploader` · `TikTok compression fix` ·
+`TikTok quality fix` · `TikTok duplicate content` · `unique video` ·
+`video fingerprint` · `YouTube Shorts` · `Instagram Reels`
+
 ## 📄 Лицензия
 
 Проект распространяется по [некоммерческой лицензии](LICENSE). Личное,
