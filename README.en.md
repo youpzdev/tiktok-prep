@@ -9,6 +9,9 @@ Python stdlib + ffmpeg · no cloud, no telemetry
 
 **by youpzdev** — [Telegram](https://t.me/youpzlabnsfw) · [TikTok](https://www.tiktok.com/@youpzdev)
 
+> [!IMPORTANT]
+> **This software is free. If anyone asks you to pay for it, you've been fucked over.**
+
 ---
 
 ## 💊 The problem
@@ -117,5 +120,10 @@ external servers.
 
 ## 📄 License
 
-This project is distributed under the [MIT License](LICENSE). Copyright © 2026
-youpzdev.
+This project is distributed under a [non-commercial license](LICENSE). Personal,
+educational, and research use is permitted. Sale, monetization, and use in
+commercial services, businesses, or work for paying clients are prohibited
+without the author's written permission.
+
+For a commercial license, contact [youpzdev on Telegram](https://t.me/youpzlabnsfw).
+Copyright © 2026 youpzdev. All rights reserved.

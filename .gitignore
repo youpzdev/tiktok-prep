@@ -16,6 +16,7 @@ env/
 incoming/
 tiktok_ready/
 logs/
+release/
 
 # ffmpeg, если положен вручную рядом с приложением
 bin/

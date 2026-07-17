@@ -1,21 +1,63 @@
-MIT License
+TikTok Prep Tool Non-Commercial License 1.0
 
-Copyright (c) 2026 youpzdev
+Copyright (c) 2026 youpzdev. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. Permission
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Subject to the terms of this license, you may use, copy, and modify this
+software and its documentation (the "Software") solely for personal,
+educational, research, or other non-commercial purposes.
+
+You may redistribute the Software, with or without modifications, only if:
+
+  a. the redistribution is entirely non-commercial;
+  b. this license and the copyright notice above are included unchanged; and
+  c. modified versions are clearly identified as modified and are not
+     presented as official versions made or endorsed by youpzdev.
+
+2. Commercial use prohibited
+
+Without prior written permission from youpzdev, you may not use the Software,
+modified versions of the Software, or substantial portions of the Software for
+any purpose intended for or directed toward commercial advantage or monetary
+compensation. Prohibited commercial use includes, without limitation:
+
+  a. selling, licensing, renting, or charging for the Software or access to it;
+  b. including the Software in a paid product, service, subscription, or
+     commercial workflow;
+  c. operating the Software as part of an ad-supported, sponsored, or otherwise
+     monetized service;
+  d. using the Software on behalf of a business, employer, or paying client; or
+  e. using the Software to produce, process, or distribute monetized commercial
+     content.
+
+3. Commercial licenses
+
+Commercial use is permitted only under a separate written license granted by
+youpzdev. Requests may be sent to: https://t.me/youpzlabnsfw
+
+4. Ownership
+
+The Software is licensed, not sold. This license grants only the permissions
+expressly stated above. All other rights are reserved by youpzdev. No right to
+use the names, logos, or trademarks of youpzdev is granted by this license.
+
+5. Termination
+
+Your rights under this license terminate automatically if you violate any of
+its terms. Upon termination, you must stop using and distributing the Software
+and delete all copies in your possession or control. Sections 4 and 6 survive
+termination.
+
+6. Disclaimer of warranty and limitation of liability
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR OR COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+This is a source-available non-commercial license. It is not an open-source
+license as defined by the Open Source Initiative.
