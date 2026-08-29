@@ -65,6 +65,7 @@ const I18N = {
     err_probe: "не удалось прочитать файл",
     warn_mask_incomplete: "маскировка неполная: подпись энкодера осталась в файле",
     fps_uncapped: "fps без потолка",
+    bpp: "бит/пиксель",
     unit_min: " мин", unit_sec: " с",
     gb: "гб", mb: "мб", kb: "кб", mbits: "мбит/с",
   },
@@ -114,6 +115,7 @@ const I18N = {
     err_probe: "could not read the file",
     warn_mask_incomplete: "masking incomplete: the encoder signature is still in the file",
     fps_uncapped: "uncapped fps",
+    bpp: "bits/pixel",
     unit_min: " min", unit_sec: " s",
     gb: "gb", mb: "mb", kb: "kb", mbits: "mbps",
   },
@@ -213,7 +215,8 @@ async function checkEngine() {
 function modeSpec(m) {
   const res = m.max_long + "x" + m.max_short;
   const fps = m.max_fps ? Math.round(m.max_fps) + "fps" : t("fps_uncapped");
-  return res + " · " + fps + " · crf " + m.crf;
+  const rate = m.bpp ? m.bpp.toFixed(3) + " " + t("bpp") : "";
+  return [res, fps, rate].filter(Boolean).join(" · ");
 }
 
 function renderModes() {

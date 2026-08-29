@@ -25,11 +25,13 @@
 
 html { font-size: 100%; }
 
-html, body { height: 100%; }
+html { height: 100%; overflow: hidden; }
 
 body {
   margin: 0;
-  height: 100dvh;
+  position: fixed;             /* прибито к вьюпорту: ни скролл документа, ни
+     зум браузера не могут сдвинуть раскладку вниз */
+  inset: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   align-content: start;
