@@ -273,15 +273,18 @@ def can_copy_stream(info: dict, profile: dict):
     return True
 
 
-def build_copy_command(src: str, dst: str, info: dict):
-    """Ремукс без реэнкода: поток остаётся байт в байт, меняется только контейнер."""
+def build_copy_command(src: str, dst: str, info: dict, audio_bitrate: str = "200k"):
+    """Ремукс без реэнкода: видео остаётся байт в байт, меняется только контейнер."""
     cmd = [FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
            "-progress", "pipe:1", "-nostats",
            "-i", src, "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy"]
-    if info.get("acodec") in COPY_ACODECS:
+    # Звук приводится к 48 кГц всегда: у нативного экспорта другой частоты не
+    # бывает, а перекодирование дорожки стоит доли секунды и видео не трогает.
+    if info.get("acodec") in COPY_ACODECS and info.get("audio_hz") == 48000:
         cmd += ["-c:a", "copy"]
     elif info.get("acodec"):
-        cmd += ["-c:a", "aac", "-profile:a", "aac_low", "-ar", "48000", "-ac", "2"]
+        cmd += ["-c:a", "aac", "-profile:a", "aac_low", "-ar", "48000",
+                "-b:a", audio_bitrate, "-ac", "2"]
     cmd += ["-map_metadata", "-1", "-metadata", f"artist={BRAND}",
             "-movflags", "+faststart", dst]
     return cmd
@@ -291,7 +294,7 @@ def build_command(src: str, dst: str, info: dict, profile: dict):
     """Команда первого шага: копирование потока, если профиль это допускает,
     иначе полный реэнкод."""
     if can_copy_stream(info, profile):
-        return build_copy_command(src, dst, info)
+        return build_copy_command(src, dst, info, profile["audio_bitrate"])
     return build_reencode_command(src, dst, info, profile)
 
 
