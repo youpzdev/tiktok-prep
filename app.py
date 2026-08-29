@@ -189,6 +189,7 @@ PROFILES = {
         "level": _env("S_LEVEL", "4.2"),
         "audio_bitrate": _env("S_ABR", "200k"),
         "reencode": "always",
+        "x264_params": _env("S_X264", "weightb=0:chroma-qp-offset=0"),
         "footer": True,
     },
     "max": {
@@ -205,6 +206,7 @@ PROFILES = {
         "level": _env("M_LEVEL", ""),              # пусто - уровень выбирает x264
         "audio_bitrate": _env("M_ABR", "320k"),
         "reencode": _env("M_REENCODE", "auto"),
+        "x264_params": _env("M_X264", ""),
         "footer": False,
     },
 }
@@ -355,8 +357,15 @@ def build_reencode_command(src: str, dst: str, info: dict, profile: dict):
            "-i", src, "-map", "0:v:0", "-map", "0:a:0?"]
     if vf:
         cmd += ["-vf", ",".join(vf), "-sws_flags", SCALE_FLAGS]
+    # Ровный интервал ключевых кадров: у рабочего файла GOP держится в пределах
+    # 64-120 кадров, а x264 по умолчанию растягивал первые группы до 235, что для
+    # анализатора выглядит как склейка сцен.
+    fps_out = min(info.get("fps") or 60, profile["max_fps"] or (info.get("fps") or 60))
+    keyint = max(24, int(round(fps_out * 2)))
     cmd += ["-c:v", "libx264", "-profile:v", "high",
-            "-preset", profile["preset"]]
+            "-preset", profile["preset"],
+            "-g", str(keyint), "-keyint_min", str(max(12, keyint // 2)),
+            "-sc_threshold", "0"]
     cmd += target_rate_args(info, profile)
     cmd += ["-maxrate", profile["maxrate"], "-bufsize", profile["bufsize"],
             "-refs", str(profile["refs"]),
@@ -369,6 +378,10 @@ def build_reencode_command(src: str, dst: str, info: dict, profile: dict):
             "-map_metadata", "-1", "-metadata", f"artist={BRAND}"]
     if profile["level"]:
         cmd += ["-level", profile["level"]]
+    # PPS рабочего файла собран без 8x8-трансформа и с одним опорным кадром;
+    # x264 по умолчанию пишет обратное, и пара SPS+PPS сразу выдаёт чужой энкодер.
+    if profile.get("x264_params"):
+        cmd += ["-x264-params", profile["x264_params"]]
     cmd += ["-movflags", "+faststart", dst]
     return cmd
 
