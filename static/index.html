@@ -3,161 +3,83 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>YOUPZDEV — TikTok Prep</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Manrope:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
-<link rel="icon" href="logo-v2.png">
+<title>TikTok Prep</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
-<!-- ================= decorative layer ================= -->
-<div class="stage" aria-hidden="true">
-  <div class="stage-vignette"></div>
-  <div class="stage-grain"></div>
-  <div class="stage-streak streak-a"></div>
-  <div class="stage-streak streak-b"></div>
-
-  <svg class="stage-v" viewBox="0 0 800 800" fill="none">
-    <defs>
-      <filter id="vglow" x="-60%" y="-60%" width="220%" height="220%">
-        <feGaussianBlur stdDeviation="14" result="b1"/>
-        <feGaussianBlur stdDeviation="42" result="b2"/>
-        <feMerge>
-          <feMergeNode in="b2"/><feMergeNode in="b1"/><feMergeNode in="SourceGraphic"/>
-        </feMerge>
-      </filter>
-    </defs>
-    <!-- hex badge -->
-    <path class="v-hex" d="M400 40 L710 210 L710 590 L400 760 L90 590 L90 210 Z"/>
-    <!-- V mark -->
-    <path class="v-mark" filter="url(#vglow)" d="M215 200 L400 620 L585 200 L505 200 L400 445 L295 200 Z"/>
-  </svg>
-
-  <div class="stage-word">PREP</div>
-
-  <!-- corner registration marks -->
-  <div class="corner c-tl"></div><div class="corner c-tr"></div>
-  <div class="corner c-bl"></div><div class="corner c-br"></div>
-
-  <!-- right sponsor-style rail -->
-  <div class="rail rail-right">
-    <span>X264&nbsp;CRF&nbsp;22</span><span>1080P&nbsp;FIT</span><span>×10&nbsp;FRAMES</span>
-    <span>STSZ&nbsp;/&nbsp;STTS</span><span>STCO&nbsp;FIX</span><span>FASTSTART</span>
-    <span>COMPRESSORNAME&nbsp;00</span><span>MP4&nbsp;PATCH</span>
+<header class="bar">
+  <div class="brand">
+    <span class="brand-name">TIKTOK PREP</span>
+    <span class="brand-sub" data-i18n="brand_sub">компрессия и маскировка контейнера</span>
   </div>
-  <!-- left rail -->
-  <div class="rail rail-left">
-    <span>LOCAL&nbsp;ONLY</span><span>NO&nbsp;TELEMETRY</span><span>COMPRESS&nbsp;+&nbsp;PATCH</span>
-  </div>
-
-  <div class="foot-tags">
-    <div class="tag-block"><em>SOURCE</em><b id="tag-src">— / —</b></div>
-    <div class="tag-block"><em>TARGET</em><b>TIKTOK / DEDUPE</b></div>
-    <div class="tag-block hide-sm"><em>METHOD</em><b>CONTAINER PATCH</b></div>
-  </div>
-</div>
-
-<!-- ================= content ================= -->
-<main class="page">
-
-  <header class="top">
-    <a class="brand" href="https://t.me/youpzlabnsfw" target="_blank" rel="noopener">
-      <img src="logo-v2.png" alt="youpzdev" class="brand-logo">
-      <div class="brand-name">
-        <b>TIKTOK&nbsp;PREP</b>
-        <span>BY&nbsp;YOUPZDEV</span>
-      </div>
-    </a>
-    <div class="top-right">
-      <div class="seg lang" id="lang">
-        <button data-lang="ru">RU</button><button data-lang="en">EN</button>
-      </div>
-      <div class="engine" id="engine">
-        <span class="engine-dot"></span>
-        <span class="engine-text" id="engine-text">ENGINE&nbsp;CHECK…</span>
-      </div>
+  <div class="bar-right">
+    <div class="engine" id="engine">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="engine-text" data-i18n="engine_check">проверка движка</span>
     </div>
-  </header>
-
-  <section class="hero">
-    <h1 class="hero-title">
-      <span class="line">UNIQUE&nbsp;VS</span>
-      <span class="line line-2">TIKTOK&nbsp;<svg class="arr" viewBox="0 0 24 24"><path d="M17 7 L7 17 M7 9 v8 h8" stroke-width="2.2" fill="none"/></svg></span>
-    </h1>
-    <p class="hero-sub" data-i18n="hero_sub">Лёгкая компрессия + патч MP4-контейнера — размер меньше, качество почти без потерь.<br>
-    Обходит автодетект повторного контента: меняет фингерпринт, счётчик кадров и метаданные.</p>
-    <div class="hero-chips">
-      <span class="chip" data-i18n="chip_1">СЖАТИЕ ~5×</span><span class="chip" data-i18n="chip_2">РАЗДУВ КАДРОВ ×10</span>
-      <span class="chip" data-i18n="chip_3">НОВЫЙ ФИНГЕРПРИНТ</span><span class="chip">FASTSTART</span>
+    <div class="seg" id="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="ru">RU</button>
+      <button type="button" data-lang="en">EN</button>
     </div>
+  </div>
+</header>
+
+<main class="work">
+
+  <section class="panel modes" aria-labelledby="modes-title">
+    <h2 id="modes-title" class="panel-title" data-i18n="modes_title">режим</h2>
+    <div class="mode-list" id="modes"></div>
   </section>
 
-  <!-- ================= dropzone ================= -->
-  <section class="glass dropzone" id="dropzone">
-    <div class="dz-border"></div>
-    <div class="dz-inner">
-      <svg class="dz-icon" viewBox="0 0 64 64" fill="none">
-        <path d="M32 42 V14 M22 24 L32 14 L42 24" stroke-width="2.5"/>
-        <path d="M12 42 v8 a4 4 0 0 0 4 4 h32 a4 4 0 0 0 4-4 v-8" stroke-width="2.5"/>
-      </svg>
-      <div class="dz-title" data-i18n="dz_title">Перетащите видео сюда</div>
-      <div class="dz-hint" data-i18n="dz_hint">MP4 на выходе · MOV · MKV · WEBM на входе — загрузи и жми START</div>
-      <div class="dz-actions">
-        <button class="btn btn-ghost" id="btn-files"><i>⊞</i><span data-i18n="dz_files">Выбрать файлы</span></button>
-        <button class="btn btn-ghost" id="btn-folder"><i>▤</i><span data-i18n="dz_folder">Папка целиком</span></button>
-      </div>
-      <div class="dz-upload" id="dz-upload" hidden>
-        <div class="dz-upload-bar"><span id="dz-upload-fill"></span></div>
-        <span class="dz-upload-text" id="dz-upload-text"></span>
-      </div>
-    </div>
-  </section>
-
-  <!-- ================= how it works ================= -->
-  <section class="glass method">
+  <section class="panel main" aria-labelledby="queue-title">
     <div class="panel-head">
-      <span class="panel-title" data-i18n="method_title">ЧТО&nbsp;ДЕЛАЕТ&nbsp;ПАТЧ</span>
-      <span class="panel-note mono" data-i18n="method_note">сначала компрессия, затем патч</span>
-    </div>
-    <ol class="method-list">
-      <li data-i18n="method_1"><b>Компрессия.</b> Даунскейл во вписывание в кадр TikTok (до 1080p) + x264 CRF&nbsp;22, VBV&nbsp;15&nbsp;Мбит/с, аудио AAC&nbsp;48&nbsp;кГц — размер падает в разы, качество почти без потерь.</li>
-      <li data-i18n="method_2"><b>Раздувание счётчика кадров.</b> Дописываются фиктивные сэмплы, таблицы <span class="mono">stsz / stts / stsc / stco</span> пересчитываются — контейнер показывает ×10 кадров, реальные данные целы.</li>
-      <li data-i18n="method_3"><b>Чистка отпечатка.</b> Обнуляется <span class="mono">compressorname</span>, метаданные переписываются под новый уникальный ID — хэш и фингерпринт меняются.</li>
-    </ol>
-  </section>
-
-  <!-- ================= queue ================= -->
-  <section class="queue-wrap" id="queue-wrap" hidden>
-    <div class="queue-head">
-      <span class="panel-title"><span data-i18n="queue_title">ОЧЕРЕДЬ</span>&nbsp;<span class="mono" id="queue-count">0</span></span>
-      <div class="queue-actions">
-        <button class="btn btn-ghost btn-sm" id="btn-clear">Очистить</button>
-        <button class="btn btn-primary" id="btn-start">
-          <span class="btn-sheen"></span>START&nbsp;PROCESSING
-        </button>
+      <h2 id="queue-title" class="panel-title">
+        <span data-i18n="queue_title">очередь</span>
+        <span class="count" id="queue-count">0</span>
+      </h2>
+      <div class="head-actions">
+        <button type="button" class="btn" id="btn-files" data-i18n="btn_files">файлы</button>
+        <button type="button" class="btn" id="btn-folder" data-i18n="btn_folder">папка</button>
+        <button type="button" class="btn ghost" id="btn-clear" data-i18n="btn_clear">очистить</button>
+        <button type="button" class="btn primary" id="btn-start" data-i18n="btn_start">старт</button>
       </div>
     </div>
-    <div class="queue" id="queue"></div>
-    <div class="queue-summary glass" id="summary" hidden>
-      <div class="sum-item"><em data-i18n="sum_count">ПРОПАТЧЕНО</em><b id="sum-count">0</b></div>
-      <div class="sum-item"><em data-i18n="sum_before">КАДРОВ БЫЛО</em><b id="sum-before">—</b></div>
-      <div class="sum-item"><em data-i18n="sum_after">СТАЛО</em><b id="sum-after">—</b></div>
-      <div class="sum-item sum-accent"><em data-i18n="sum_saved">РАЗДУВ</em><b id="sum-saved">—</b></div>
+
+    <p class="notice" id="notice" role="status" hidden></p>
+    <p class="upload mono" id="upload" role="status" hidden></p>
+
+    <div class="jobline" id="jobline" hidden>
+      <div class="jobbar"><div class="jobbar-fill" id="jobbar-fill"></div></div>
+      <span class="jobtext mono" id="jobtext"></span>
+    </div>
+
+    <div class="queue-scroll">
+      <ol class="queue" id="queue" aria-live="polite"></ol>
+      <div class="empty" id="empty">
+        <p class="empty-title" data-i18n="empty_title">перетащи видео в окно</p>
+        <p class="empty-hint" data-i18n="empty_hint">mp4, mov, mkv, webm и другие. на выходе mp4 в папке tiktok_ready рядом с исходником</p>
+      </div>
+    </div>
+
+    <div class="result" id="result" hidden>
+      <span class="result-text mono" id="result-text"></span>
+      <button type="button" class="btn" id="btn-open" data-i18n="btn_open">открыть папку</button>
     </div>
   </section>
-
-  <footer class="foot">
-    <span class="mono" data-i18n="foot_left">TIKTOK&nbsp;PREP&nbsp;·&nbsp;СЖАТИЕ&nbsp;+&nbsp;ПАТЧ&nbsp;MP4</span>
-    <span class="mono foot-right">
-      BY&nbsp;YOUPZDEV&nbsp;·&nbsp;<a class="credit" href="https://t.me/youpzlabnsfw" target="_blank" rel="noopener">TELEGRAM</a>&nbsp;·&nbsp;<a class="credit" href="https://www.tiktok.com/@youpzdev" target="_blank" rel="noopener">TIKTOK</a>
-    </span>
-    <span class="mono" id="foot-engine"></span>
-  </footer>
 
 </main>
 
-<script src="app.js"></script>
+<footer class="foot mono">
+  <span id="foot-engine"></span>
+  <span id="foot-out"></span>
+</footer>
+
+<div class="drop-veil" id="drop-veil" hidden>
+  <span data-i18n="drop_now">отпускай</span>
+</div>
+
+<script src="/app.js"></script>
 </body>
 </html>
