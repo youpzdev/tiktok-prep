@@ -212,6 +212,32 @@ button { font: inherit; color: inherit; }
 
 .mode[disabled] { opacity: 0.5; cursor: default; }
 
+.toggle {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin-top: 0.875rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+
+.toggle input { margin: 0.125rem 0 0; accent-color: var(--accent); }
+
+.toggle-name {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.toggle-note {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
 /* ---------------- main panel ---------------- */
 
 .panel-head {

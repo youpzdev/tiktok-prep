@@ -62,8 +62,19 @@ output field by field. The difference was in the signatures, not in the picture:
 | Frame count | matches duration | inflated tenfold |
 
 The file was literally signed with the word Patched and the full encoder settings
-string. Those fields are now rewritten to match a native export, and frame count
-inflation is gone entirely.
+string. Those fields are cleaned now.
+
+An important caveat: the reference is a file **downloaded from TikTok**, meaning
+it already went through their transcoder (`te_is_reencode: 1` in its metadata is
+their own marker). Matching it means "we look like their output", not "we will be
+accepted without re-compression". Those are two different properties.
+
+### Attempt 5, separating the two levers
+
+Frame inflation and the giveaway signatures always shipped together, so there was
+no way to tell which one caused the hiding. They are separate now: signatures are
+always cleaned, and inflation is a toggle. The combination "inflation plus clean
+signatures" had never been tested.
 
 ## Why it works (a guess)
 
@@ -97,6 +108,20 @@ bitstream without re-encoding:
 
 Decoded frames after masking are bit-for-bit identical to the original, verified
 by comparing the MD5 of every frame before and after.
+
+## Frame count inflation
+
+A separate toggle in the UI. Dummy samples are appended to the video track's
+`stsz`, `stts`, `stsc` and `stco` tables: the container starts claiming ten times
+more frames, `stts` reports 172 seconds instead of 17, and the observed bitrate
+drops from 16.2 to 1.63 Mbps. `mvhd` and `mdhd` stay honest, real samples and
+`mdat` are untouched, and the dummy chunks point past the end of the file.
+
+The idea is that an estimator computing bitrate as size over duration sees a long
+and thin video and does not bother re-compressing it. This used to work before
+the algorithm changed, so whether to enable it is a question to verify on your own
+account. The cost: players complain about the empty samples, and playback outside
+TikTok may be broken.
 
 ## Modes
 
