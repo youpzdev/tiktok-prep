@@ -23,6 +23,7 @@ from mp4boxes import (Mp4Error, _child, _find, _parse, _serialize, _stco_read,
 X264_SEI_UUID = bytes.fromhex("dc45e9bde6d948b7962cd820d923eeef")
 ENCODER_MARKER = b"x264 - core"
 GHOST_SAMPLE_SIZE = 8            # как у рабочего патчера: 8 байт на фиктивный сэмпл
+GHOST_SAMPLE_BYTES = bytes([0, 0, 0, 4, 0, 0, 0, 0])     # их содержимое сэмпла
 FULL_BOXES = {b"meta"}
 
 
@@ -69,15 +70,17 @@ def _blank_sei(total_len):
 
 
 def _mask_sei(data):
-    """Вычистить x264-SEI, заменив его на filler той же длины.
+    """Вырезать x264-SEI целиком вместе с полем длины NAL.
 
-    У нативного экспорта в потоке нет ни одного user_data_unregistered, поэтому
-    подпись не подменяется, а исчезает. Длина NAL сохраняется, так что таблицы
-    stsz и stco остаются валидными, а кадры декодируются побитово так же.
+    В потоке рабочего патчера нет ни одного SEI, поэтому мало затереть подпись
+    filler-ом: сам факт наличия user data выдаёт посторонний энкодер. Данные
+    сдвигаются, поэтому вызывающий код обязан поправить размер затронутого
+    сэмпла и оффсеты чанков - для этого возвращается список вырезов.
     """
     buf = bytearray(data)
-    replaced = 0
+    cuts = []
     pos = 0
+    marker = bytes([0x06, 0x05])
     while True:
         i = buf.find(X264_SEI_UUID, pos)
         if i < 0:
@@ -88,15 +91,17 @@ def _mask_sei(data):
         while k > 4 and buf[k] == 0xFF:
             k -= 1
         start = k - 1
-        if start < 4 or bytes(buf[start:start + 2]) != b"\x06\x05":
+        if start < 4 or bytes(buf[start:start + 2]) != marker:
             continue
         nal_len = struct.unpack(">I", buf[start - 4:start])[0]
         if start + nal_len > len(buf):
             continue
-        buf[start:start + nal_len] = _blank_sei(nal_len)
-        replaced += 1
-        pos = start + nal_len
-    return bytes(buf), replaced
+        cut_from = start - 4                   # вместе с четырьмя байтами длины
+        cut_len = nal_len + 4
+        del buf[cut_from:cut_from + cut_len]
+        cuts.append((cut_from, cut_len))
+        pos = cut_from
+    return bytes(buf), cuts
 
 
 def _walk_blob(data, start, end, path, out):
@@ -226,6 +231,16 @@ def _add_ghost_audio(moov, multiplier):
     _stsc_append(stsc, len(real_chunks) + 1, fake, 1)
     _stco_write(stco, real_chunks + [0])           # оффсет проставим после сборки
 
+    # Длительность дорожки обязана сойтись с суммой дельт stts, иначе контейнер
+    # формально невалиден. Заодно убираем edts: список правок обрезал бы клон
+    # обратно к исходной длине и гасил весь смысл затеи.
+    mdia_clone = _child(clone, b"mdia")
+    mdhd = _child(mdia_clone, b"mdhd")
+    md = bytearray(mdhd["data"])
+    md[16:20] = struct.pack(">I", struct.unpack(">I", md[16:20])[0] + fake)
+    mdhd["data"] = bytes(md)
+    clone["children"] = [c for c in clone["children"] if c["type"] != b"edts"]
+
     mvhd = _child(moov, b"mvhd")
     next_id = struct.unpack(">I", mvhd["data"][-4:])[0]
     tkhd = _child(clone, b"tkhd")
@@ -270,13 +285,32 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
     with open(in_path, "rb") as f:
         data = f.read()
 
-    data, sei_count = _mask_sei(data)
-
     tree = _parse(data, 0, len(data))
     top_types = [b["type"] for b in tree]
     moov = next((b for b in tree if b["type"] == b"moov"), None)
     if moov is None or b"mdat" not in top_types:
         raise Mp4Error("не найден moov или mdat")
+
+    # SEI вырезается внутри mdat, поэтому размер бокса пересчитается при сборке.
+    # Медиаданные при этом укорачиваются: правим размер задетого сэмпла и все
+    # оффсеты правее выреза.
+    mdat = next(b for b in tree if b["type"] == b"mdat")
+    mdat_body, sei_cuts = _mask_sei(mdat["data"])
+    if sei_cuts:
+        mdat["data"] = mdat_body
+        base = mdat["start"] + mdat["header"]
+        stbl = _video_stbl(moov)
+        stsz = _child(stbl, b"stsz")
+        d = bytearray(stsz["data"])
+        for _, cut_len in sei_cuts:
+            first = struct.unpack(">I", d[12:16])[0]
+            d[12:16] = struct.pack(">I", max(0, first - cut_len))
+        stsz["data"] = bytes(d)
+        for cut_from, cut_len in sei_cuts:
+            abs_cut = base + cut_from
+            for box in list(_find(moov["children"], b"stco")) + list(_find(moov["children"], b"co64")):
+                _, offs = _stco_read(box)
+                _stco_write(box, [o - cut_len if o > abs_cut else o for o in offs])
 
     stsd_written = 0
     btrt_removed = 0
@@ -339,7 +373,8 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
 
     out = _serialize(tree)                     # собираем до открытия файла:
     if ghost_samples:
-        out += bytes(ghost_samples * ghost_size)    # данные фиктивных сэмплов
+        block = GHOST_SAMPLE_BYTES[:ghost_size]
+        out += block * ghost_samples                # данные фиктивных сэмплов
     elif fake_frames:
         out += bytes(32)
 
@@ -348,7 +383,7 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
         f.write(out)
     os.replace(tmp_path, out_path)
 
-    return {"sei_replaced": sei_count, "compressorname": stsd_written,
+    return {"sei_removed": len(sei_cuts), "compressorname": stsd_written,
             "too_set": too_set, "moov_growth": growth,
             "fake_frames": fake_frames, "ghost_samples": ghost_samples,
             "btrt_removed": btrt_removed,
