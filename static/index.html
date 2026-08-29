@@ -3,23 +3,61 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>TikTok Prep</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2317191c'/%3E%3Crect x='6' y='9' width='14' height='14' rx='2' fill='none' stroke='%23e6e8ea' stroke-width='2'/%3E%3Cpath d='M22 13l5-3v12l-5-3z' fill='%236fd08c'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7.5' fill='%230A84FF'/%3E%3Cpath d='M11 10.5v11l9-5.5z' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
-<header class="bar">
-  <div class="brand">
-    <span class="brand-name">TIKTOK PREP</span>
-    <span class="brand-sub" data-i18n="brand_sub">компрессия и маскировка контейнера</span>
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-file" viewBox="0 0 24 24">
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5"/>
+  </symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24">
+    <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+  </symbol>
+  <symbol id="i-play" viewBox="0 0 24 24">
+    <path d="M7 5.5v13l11-6.5z" fill="currentColor" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24">
+    <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-broom" viewBox="0 0 24 24">
+    <path d="M6 20h12M8 20l1.2-5h5.6L16 20M11 15V6a1.5 1.5 0 0 1 3 0v9"/>
+  </symbol>
+  <symbol id="i-close" viewBox="0 0 24 24">
+    <path d="m8 8 8 8M16 8l-8 8"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24">
+    <path d="m6 12.5 4 4 8-9"/>
+  </symbol>
+  <symbol id="i-reveal" viewBox="0 0 24 24">
+    <path d="M14 4h6v6M20 4l-8.5 8.5M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/>
+  </symbol>
+  <symbol id="i-drop" viewBox="0 0 24 24">
+    <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14"/>
+  </symbol>
+</svg>
+
+<header class="chrome">
+  <div class="mark">
+    <span class="mark-glyph" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M9 7.5v9l7.5-4.5z" fill="currentColor" stroke="none"/></svg>
+    </span>
+    <span class="mark-text">
+      <span class="mark-name">TikTok Prep</span>
+      <span class="mark-sub" data-i18n="brand_sub">компрессия и маскировка контейнера</span>
+    </span>
   </div>
-  <div class="bar-right">
+
+  <div class="chrome-right">
     <div class="engine" id="engine">
-      <span class="dot" aria-hidden="true"></span>
+      <span class="engine-dot" aria-hidden="true"></span>
       <span id="engine-text" data-i18n="engine_check">проверка движка</span>
     </div>
     <div class="seg" id="lang" role="group" aria-label="Language">
+      <span class="seg-thumb" aria-hidden="true"></span>
       <button type="button" data-lang="ru">RU</button>
       <button type="button" data-lang="en">EN</button>
     </div>
@@ -28,64 +66,89 @@
 
 <main class="work">
 
-  <section class="panel modes" aria-labelledby="modes-title">
-    <h2 id="modes-title" class="panel-title" data-i18n="modes_title">режим</h2>
-    <div class="mode-list" id="modes"></div>
+  <aside class="side" aria-labelledby="modes-title">
+    <h2 id="modes-title" class="section-label" data-i18n="modes_title">режим</h2>
+    <div class="mode-list" id="modes" role="radiogroup" aria-labelledby="modes-title"></div>
 
-    <label class="toggle" for="ghost">
-      <input type="checkbox" id="ghost" checked>
-      <span>
-        <span class="toggle-name" data-i18n="ghost_name">фиктивная аудиодорожка</span>
-        <span class="toggle-note" data-i18n="ghost_note">добавляет копию звука с десятикратным числом сэмплов: оценщик видит 172 секунды вместо 17 и занижает битрейт. видео не трогается, fps честный, файл играется нормально</span>
-      </span>
-    </label>
-  </section>
+    <div class="side-rule" role="presentation"></div>
 
-  <section class="panel main" aria-labelledby="queue-title">
-    <div class="panel-head">
-      <h2 id="queue-title" class="panel-title">
+    <div class="switch-row">
+      <label class="switch" for="ghost">
+        <input type="checkbox" id="ghost" checked>
+        <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+        <span class="switch-name" data-i18n="ghost_name">фиктивная аудиодорожка</span>
+      </label>
+      <p class="switch-note" data-i18n="ghost_note">добавляет копию звука с десятикратным числом сэмплов: оценщик видит 172 секунды вместо 17 и занижает битрейт. видео не трогается, fps честный, файл играется нормально</p>
+    </div>
+  </aside>
+
+  <section class="content" aria-labelledby="queue-title">
+    <div class="content-head">
+      <h2 id="queue-title" class="head-title">
         <span data-i18n="queue_title">очередь</span>
-        <span class="count" id="queue-count">0</span>
+        <span class="badge" id="queue-count">0</span>
       </h2>
       <div class="head-actions">
-        <button type="button" class="btn" id="btn-files" data-i18n="btn_files">файлы</button>
-        <button type="button" class="btn" id="btn-folder" data-i18n="btn_folder">папка</button>
-        <button type="button" class="btn ghost" id="btn-clear" data-i18n="btn_clear">очистить</button>
-        <button type="button" class="btn primary" id="btn-start" data-i18n="btn_start">старт</button>
+        <button type="button" class="btn" id="btn-files">
+          <svg class="ico" aria-hidden="true"><use href="#i-file"/></svg>
+          <span data-i18n="btn_files">файлы</span>
+        </button>
+        <button type="button" class="btn" id="btn-folder">
+          <svg class="ico" aria-hidden="true"><use href="#i-folder"/></svg>
+          <span data-i18n="btn_folder">папка</span>
+        </button>
+        <button type="button" class="btn quiet" id="btn-clear">
+          <svg class="ico" id="clear-ico" aria-hidden="true"><use href="#i-broom"/></svg>
+          <span data-i18n="btn_clear">очистить</span>
+        </button>
+        <button type="button" class="btn primary" id="btn-start">
+          <svg class="ico" aria-hidden="true"><use href="#i-play"/></svg>
+          <span data-i18n="btn_start">старт</span>
+        </button>
       </div>
     </div>
 
-    <p class="notice" id="notice" role="status" hidden></p>
-    <p class="upload mono" id="upload" role="status" hidden></p>
-
-    <div class="jobline" id="jobline" hidden>
-      <div class="jobbar"><div class="jobbar-fill" id="jobbar-fill"></div></div>
-      <span class="jobtext mono" id="jobtext"></span>
+    <div class="banners">
+      <p class="notice" id="notice" role="status" hidden></p>
+      <p class="upload" id="upload" role="status" hidden></p>
+      <div class="jobline" id="jobline" hidden>
+        <div class="track"><div class="track-fill" id="jobbar-fill"></div></div>
+        <span class="jobtext num" id="jobtext"></span>
+      </div>
     </div>
 
-    <div class="queue-scroll">
+    <div class="scroll" id="scroll">
       <ol class="queue" id="queue" aria-live="polite"></ol>
       <div class="empty" id="empty">
+        <span class="empty-glyph" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><use href="#i-drop"/></svg>
+        </span>
         <p class="empty-title" data-i18n="empty_title">перетащи видео в окно</p>
         <p class="empty-hint" data-i18n="empty_hint">mp4, mov, mkv, webm и другие. на выходе mp4 в папке tiktok_ready рядом с исходником</p>
       </div>
     </div>
 
     <div class="result" id="result" hidden>
-      <span class="result-text mono" id="result-text"></span>
-      <button type="button" class="btn" id="btn-open" data-i18n="btn_open">открыть папку</button>
+      <span class="result-text" id="result-text"></span>
+      <button type="button" class="btn" id="btn-open">
+        <svg class="ico" aria-hidden="true"><use href="#i-reveal"/></svg>
+        <span data-i18n="btn_open">открыть папку</span>
+      </button>
     </div>
   </section>
 
 </main>
 
-<footer class="foot mono">
+<footer class="statusbar num">
   <span id="foot-engine"></span>
   <span id="foot-out"></span>
 </footer>
 
-<div class="drop-veil" id="drop-veil" hidden>
-  <span data-i18n="drop_now">отпускай</span>
+<div class="veil" id="drop-veil" hidden>
+  <div class="veil-card">
+    <svg class="veil-ico" aria-hidden="true"><use href="#i-drop"/></svg>
+    <span data-i18n="drop_now">отпускай</span>
+  </div>
 </div>
 
 <script src="/app.js"></script>
