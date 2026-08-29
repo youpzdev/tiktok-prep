@@ -10,7 +10,7 @@ Python stdlib + ffmpeg · no cloud, no telemetry
 **by youpzdev** - [Telegram](https://t.me/youpzlabnsfw) · [TikTok](https://www.tiktok.com/@youpzdev)
 
 > [!IMPORTANT]
-> **This software is free. If anyone charges you for it, you have been scammed.**
+> **This software is free. If anyone charges you for it, they're ripping you off.**
 
 ---
 
@@ -22,9 +22,9 @@ A 4K/60fps source came out as 720p/30fps at best.
 
 ## Looking for a fix
 
-### Attempt 1, upload through TikTok Studio
+### Attempt 1: upload through TikTok Studio
 
-The first and dumbest idea. A couple of tries later it was clear nothing changes.
+The first and dumbest idea. A couple of tries later it was clear nothing's changing.
 The nasty part: a video uploaded from your device stays **in your cache**, so it
 looks sharp to you and mangled to everyone else.
 
@@ -32,13 +32,13 @@ I also looked at ready-made tools. Some paid, some free but sketchy: upload your
 video to a random site, get no explanation, and receive a patched file back with
 the size cut down by compression.
 
-### Attempt 2, my own converter
+### Attempt 2: my own converter
 
 I wrote a converter that lowered the bitrate, changed the codec and downscaled to
-Full HD: **86 MB to 15 MB**. The bitrate changed too. Surprisingly **it did not
+Full HD: **86 MB to 15 MB**. The bitrate changed too. Surprisingly **it didn't
 help**, the published video still looked awful.
 
-### Attempt 3, frame count inflation
+### Attempt 3: frame count inflation
 
 Digging through the metadata of patched videos, I noticed a pattern: the source
 had 1073 frames, while the file claimed ten times more. I rebuilt the tool around
@@ -46,10 +46,10 @@ that scheme, and quality-wise it worked.
 
 Then a different problem showed up: **TikTok started hiding those videos**. The
 file is valid, it plays, it uploads, and it gets no reach. An inflated frame count
-produces something a normal export never has: the declared track duration does not
+produces something a normal export never has: the declared track duration doesn't
 match the actual content. On top of that, ffmpeg signs its own work.
 
-### Attempt 4, masking as a native export
+### Attempt 4: masking as a native export
 
 I took the MediaInfo of a real video that performed fine and compared it with my
 output field by field. The difference was in the signatures, not in the picture:
@@ -69,7 +69,7 @@ it already went through their transcoder (`te_is_reencode: 1` in its metadata is
 their own marker). Matching it means "we look like their output", not "we will be
 accepted without re-compression". Those are two different properties.
 
-### Attempt 5, separating the two levers
+### Attempt 5: separating the two levers
 
 Frame inflation and the giveaway signatures always shipped together, so there was
 no way to tell which one caused the hiding. They are separate now: signatures are
@@ -78,7 +78,7 @@ signatures" had never been tested.
 
 ## Why it works (a guess)
 
-I do not know the real reason and will not pretend otherwise, this is not my
+I don't know the real reason and I'm not going to pretend I do, this isn't my
 stack. My guess: reading metadata is cheaper for the platform than analysing the
 picture. An x264 settings string in SEI, `Lavf` in the `©too` tag and a frame
 count that does not add up are markers a regular user never produces. With those
@@ -111,7 +111,7 @@ by comparing the MD5 of every frame before and after.
 
 ## Removing the btrt box
 
-The key step, without which the rest is pointless. ffmpeg writes a `btrt` box into
+Without this the rest does nothing. ffmpeg writes a `btrt` box into
 every track's `stsd`, declaring buffer size, maximum and average bitrate as plain
 numbers. While it is there, an estimator has no reason to compute anything from
 duration - it reads the real 16 Mbps straight from the container. The working
@@ -124,7 +124,7 @@ added to `moov`: a copy of the audio whose sample count is ten times higher - 80
 real samples plus 7281 dummy ones, each one tick long. The dummy samples sit in a
 single chunk in the file tail at 8 bytes each, 58 KB for the whole clip.
 
-The point is that an estimator computes audio duration as sample count times 1024
+The trick is that an estimator computes audio duration as sample count times 1024
 divided by the sample rate. For the clone that yields 172 seconds instead of 17,
 and the observed bitrate drops tenfold. Meanwhile:
 
@@ -145,10 +145,10 @@ more frames, `stts` reports 172 seconds instead of 17, and the observed bitrate
 drops from 16.2 to 1.63 Mbps. `mvhd` and `mdhd` stay honest, real samples and
 `mdat` are untouched, and the dummy chunks point past the end of the file.
 
-The idea is that an estimator computing bitrate as size over duration sees a long
-and thin video and does not bother re-compressing it.
+The trick is that an estimator computing bitrate as size over duration sees a long
+and thin video and doesn't bother re-compressing it.
 
-**This no longer works and should stay off.** Verified 2026-08-29 on a clean file
+**This doesn't work any more. Leave it off.** Verified 2026-08-29 on a clean file
 with no giveaway signatures at all: TikTok recognises such a container and forces
 the video to "only me" privacy. That also answers the old question of what got
 the videos hidden before - it was the inflation, not the tags. The toggle is kept
@@ -178,7 +178,7 @@ picture stays bit-for-bit identical and the job takes a fraction of a second.
 Re-encoding kicks in only when the video has to be downscaled or converted from
 another format. The reason is simple: re-encoding finished H.264 is a second
 generation of loss on top of what TikTok adds on upload. Metadata masking still
-applies, but a file like this cannot pass as a native export.
+applies, but a file like this can't pass as a native export.
 
 Every parameter can be overridden with environment variables, no code edits
 needed: `TT_MODE`, `TT_S_CRF`, `TT_M_CRF`, `TT_S_MAXRATE`, `TT_BRAND`, `TT_SEI`,
@@ -213,8 +213,8 @@ external servers.
 
 ---
 
-> This is an arms race. The trick works today, but TikTok keeps tuning its
-> algorithms, and nobody can promise it lasts forever.
+> It's armour versus shell. The trick works today, but TikTok keeps tuning its
+> algorithms, and nobody's promising it'll last.
 
 ## Keywords and tags
 
