@@ -219,9 +219,14 @@ if DEFAULT_MODE not in PROFILES:
 # рычаг вынесен отдельным переключателем и проверяется независимо.
 INFLATE_DEFAULT = _env("INFLATE", 0, int)
 
+# Клон аудиодорожки с фиктивными сэмплами: анализатор, считающий длительность по
+# числу аудиокадров, видит время в GHOST раз больше и занижает битрейт. Видео при
+# этом не тронуто, fps честный. Приём взят из файла рабочего патчера.
+GHOST_DEFAULT = _env("GHOST", 10, int)
+
 # Строка энкодера, которая уходит в SEI вместо настроек x264, и шаблон ©too.
-MASK_SEI = _env("SEI", "EditingVC1-v1.5.0.2")
-MASK_MAXRATE_BPS = _env("MASK_MAXRATE", 31948000, int)
+MASK_SEI = _env("SEI", "EditingVC1-v1.6.0.3-cv")
+MASK_MAXRATE_BPS = _env("MASK_MAXRATE", 32428000, int)
 
 # 0xC0000005 access violation: флаки-сборки ffmpeg / Raptor Lake иногда падают
 # посреди энкода - та же команда обычно проходит с ретрая.
@@ -372,6 +377,7 @@ def process_job(job_id: str):
     job = JOBS[job_id]
     profile = PROFILES[job.get("mode", DEFAULT_MODE)]
     inflate = int(job.get("inflate", 0) or 0)
+    ghost = int(job.get("ghost", GHOST_DEFAULT) or 0)
     for item in job["files"]:
         if job.get("cancelled"):
             item["status"] = "cancelled"
@@ -452,8 +458,7 @@ def process_job(job_id: str):
                         too_value=mp4mask.encoder_json(MASK_MAXRATE_BPS,
                                                        random.randint(10 ** 8, 10 ** 9 - 1),
                                                        time.time()),
-                        footer=profile.get("footer", False),
-                        inflate=inflate)
+                        ghost=ghost, inflate=inflate)
                     break
                 except Exception as e:
                     # mask() пишет через .part и переименовывает, так что готовый
@@ -565,6 +570,7 @@ class Handler(BaseHTTPRequestHandler):
                 "version": ffmpeg_version(), "ffmpeg_path": FFMPEG,
                 "default_mode": DEFAULT_MODE,
                 "inflate_default": INFLATE_DEFAULT,
+                "ghost_default": GHOST_DEFAULT,
                 "modes": [{"id": k,
                            "label": v["label"],
                            "max_short": v["max_short"],
@@ -651,11 +657,16 @@ class Handler(BaseHTTPRequestHandler):
                 inflate = max(0, min(30, int(data.get("inflate", INFLATE_DEFAULT))))
             except (TypeError, ValueError):
                 inflate = INFLATE_DEFAULT
+            try:
+                ghost = max(0, min(30, int(data.get("ghost", GHOST_DEFAULT))))
+            except (TypeError, ValueError):
+                ghost = GHOST_DEFAULT
             job_id = uuid.uuid4().hex[:12]
             job = {
                 "status": "running",
                 "mode": mode,
                 "inflate": inflate,
+                "ghost": ghost,
                 "files": [{"src": p, "name": os.path.basename(p),
                            "status": "queued", "progress": 0.0} for p in paths],
             }

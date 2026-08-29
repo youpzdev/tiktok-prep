@@ -21,7 +21,7 @@ from mp4boxes import (Mp4Error, _child, _find, _parse, _serialize, _stco_read,
 
 X264_SEI_UUID = bytes.fromhex("dc45e9bde6d948b7962cd820d923eeef")
 ENCODER_MARKER = b"x264 - core"
-FOOTER_PATTERN = bytes.fromhex("0000000400000000")
+GHOST_SAMPLE_SIZE = 8            # как у рабочего патчера: 8 байт на фиктивный сэмпл
 FULL_BOXES = {b"meta"}
 
 
@@ -147,11 +147,12 @@ def _set_ilst_tag(udta_data, key, value):
 
 
 def encoder_json(maxrate_bps, creation_id, creation_time):
+    """Тег ©too в том виде, в каком его пишет рабочий патчер (версия 2026-08-29)."""
     return json.dumps({
         "aid": "0", "libevc": "1", "trans_type": "4", "te_is_reencode": "1",
-        "maxrate": str(int(maxrate_bps)), "cr": "0.00", "br": "0.00",
-        "beauty": "0.00", "creation_id": str(creation_id),
-        "creation_time": str(int(creation_time)),
+        "te_is_use_ai_predict": "0", "maxrate": str(int(maxrate_bps)),
+        "creation_id": str(creation_id), "creation_time": str(int(creation_time)),
+        "extra": "{}",
     })
 
 
@@ -167,6 +168,71 @@ def _video_stbl(moov):
                     raise Mp4Error(f"в видеотреке нет бокса {t!r}")
             return node
     raise Mp4Error("видеотрек не найден")
+
+
+def _copy_box(box):
+    if "children" in box:
+        return {"type": box["type"], "header": box["header"], "start": box["start"],
+                "size": box["size"], "children": [_copy_box(c) for c in box["children"]]}
+    return dict(box)
+
+
+def _audio_trak(moov):
+    for trak in _find(moov["children"], b"trak"):
+        mdia = _child(trak, b"mdia")
+        hdlr = _child(mdia, b"hdlr") if mdia else None
+        if hdlr and hdlr["data"][8:12] == b"soun":
+            return trak
+    return None
+
+
+def _add_ghost_audio(moov, multiplier):
+    """Добавить клон аудиодорожки с фиктивными сэмплами.
+
+    Приём подсмотрен у рабочего патчера: клон несёт те же реальные сэмплы плюс
+    в multiplier-1 раз больше фиктивных длиной один тик каждый. Анализатор,
+    считающий длительность как число аудиокадров умножить на 1024 и поделить на
+    частоту, видит время в multiplier раз больше реального и оценивает битрейт
+    во столько же раз ниже. При этом видео не тронуто, fps честный, а настоящая
+    длительность клона растёт лишь на доли секунды.
+
+    Возвращает (число фиктивных сэмплов, размер фиктивного сэмпла).
+    """
+    src = _audio_trak(moov)
+    if src is None:
+        return 0, 0
+    clone = _copy_box(src)
+    stbl = clone
+    for t in (b"mdia", b"minf", b"stbl"):
+        stbl = _child(stbl, t)
+        if stbl is None:
+            return 0, 0
+    stsz, stts, stsc = _child(stbl, b"stsz"), _child(stbl, b"stts"), _child(stbl, b"stsc")
+    stco = _child(stbl, b"stco") or _child(stbl, b"co64")
+    if not all((stsz, stts, stsc, stco)):
+        return 0, 0
+
+    _, real_samples = _stsz_info(stsz)
+    if real_samples == 0:
+        return 0, 0
+    fake = real_samples * (int(multiplier) - 1)
+    if fake <= 0:
+        return 0, 0
+    _, real_chunks = _stco_read(stco)
+
+    _stsz_append(stsz, fake, GHOST_SAMPLE_SIZE)
+    _stts_append(stts, fake, 1)                    # один тик на фиктивный сэмпл
+    _stsc_append(stsc, len(real_chunks) + 1, fake, 1)
+    _stco_write(stco, real_chunks + [0])           # оффсет проставим после сборки
+
+    mvhd = _child(moov, b"mvhd")
+    next_id = struct.unpack(">I", mvhd["data"][-4:])[0]
+    tkhd = _child(clone, b"tkhd")
+    tkhd["data"] = tkhd["data"][:12] + struct.pack(">I", next_id) + tkhd["data"][16:]
+    mvhd["data"] = mvhd["data"][:-4] + struct.pack(">I", next_id + 1)
+
+    moov["children"].insert(moov["children"].index(src) + 1, clone)
+    return fake, GHOST_SAMPLE_SIZE
 
 
 def _inflate_tables(moov, multiplier):
@@ -196,7 +262,7 @@ def _inflate_tables(moov, multiplier):
 
 
 def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
-         footer=False, inflate=0):
+         ghost=0, inflate=0):
     """sei_text уходит в compressorname (MediaInfo показывает его как
     Encoded_Library). Сам SEI с настройками x264 вычищается: у нативного
     экспорта в потоке нет ни одного user_data_unregistered."""
@@ -222,6 +288,7 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
             udta["data"], too_set = _set_ilst_tag(udta["data"], b"\xa9too", too_value)
 
     fake_frames = _inflate_tables(moov, inflate) if inflate else 0
+    ghost_samples, ghost_size = _add_ghost_audio(moov, ghost) if ghost > 1 else (0, 0)
 
     # У нативного экспорта между moov и mdat нет ничего: пустой free-бокс от
     # faststart выкидываем, а сдвиг медиаданных считаем по фактической позиции
@@ -239,27 +306,39 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
             _, offs = _stco_read(box)
             _stco_write(box, [o + shift for o in offs])
 
+    tail_offset = sum((len(_serialize([b])) if "children" in b else b["header"] + len(b["data"]))
+                      for b in tree)
+    if not (fake_frames or ghost_samples) or tail_offset < 2 ** 32:
+        pass
+    else:
+        raise Mp4Error("оффсет за 4 ГБ, нужен co64")
+
     if fake_frames:
         # Фиктивные чанки все смотрят в один оффсет за концом медиаданных:
         # mdat не растёт, реальные сэмплы не трогаются.
-        tail_offset = sum((len(_serialize([b])) if "children" in b else b["header"] + len(b["data"]))
-                          for b in tree)
         stbl = _video_stbl(moov)
         stco = _child(stbl, b"stco") or _child(stbl, b"co64")
-        is64, offs = _stco_read(stco)
-        if not is64 and tail_offset >= 2 ** 32:
-            raise Mp4Error("оффсет за 4 ГБ, нужен co64")
+        _, offs = _stco_read(stco)
         for k in range(len(offs) - fake_frames, len(offs)):
             offs[k] = tail_offset
         _stco_write(stco, offs)
 
+    if ghost_samples:
+        # Единственный чанк с фиктивными сэмплами лежит в хвосте файла.
+        clone = [t for t in _find(moov["children"], b"trak")][-1]
+        stbl = clone
+        for t in (b"mdia", b"minf", b"stbl"):
+            stbl = _child(stbl, t)
+        stco = _child(stbl, b"stco") or _child(stbl, b"co64")
+        _, offs = _stco_read(stco)
+        offs[-1] = tail_offset
+        _stco_write(stco, offs)
+
     out = _serialize(tree)                     # собираем до открытия файла:
-    if footer:
-        # В хвосте нативного экспорта лежит блок размером примерно с moov,
-        # заполненный повторяющимся паттерном: их muxer резервирует место под
-        # индекс и не дочищает остаток.
-        size = len(_serialize([moov]))
-        out += (FOOTER_PATTERN * (size // len(FOOTER_PATTERN) + 1))[:size]
+    if ghost_samples:
+        out += bytes(ghost_samples * ghost_size)    # данные фиктивных сэмплов
+    elif fake_frames:
+        out += bytes(32)
 
     tmp_path = out_path + ".part"              # сбой не должен портить готовый выход
     with open(tmp_path, "wb") as f:
@@ -267,6 +346,6 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
     os.replace(tmp_path, out_path)
 
     return {"sei_replaced": sei_count, "compressorname": stsd_written,
-            "too_set": too_set, "moov_growth": growth, "footer": bool(footer),
-            "fake_frames": fake_frames,
+            "too_set": too_set, "moov_growth": growth,
+            "fake_frames": fake_frames, "ghost_samples": ghost_samples,
             "encoder_left": ENCODER_MARKER in out}

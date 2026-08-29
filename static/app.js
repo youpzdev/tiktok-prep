@@ -4,7 +4,7 @@
 const $ = (s) => document.querySelector(s);
 
 const RESTARTABLE = new Set(["queued", "cancelled", "error"]);
-const INFLATE_MULT = 9;          // ×9 фиктивных к реальным, итого заявленных ×10
+const GHOST_MULT = 10;           // во столько раз клон заявляет больше сэмплов
 
 const state = {
   queue: [],
@@ -67,6 +67,9 @@ const I18N = {
     warn_mask_incomplete: "маскировка неполная: подпись энкодера осталась в файле",
     fps_uncapped: "fps без потолка",
     bpp: "бит/пиксель",
+    ghost_name: "фиктивная аудиодорожка",
+    ghost_note: "добавляет копию звука с десятикратным числом сэмплов: оценщик видит 172 секунды вместо 17 и занижает битрейт. видео не трогается, fps честный, файл играется нормально",
+    tag_ghost: "звук раздут",
     inflate_name: "раздувание кадров",
     inflate_note: "ОПАСНО. контейнер заявляет в 10 раз больше кадров, чтобы битрейт выглядел низким. проверено 2026-08-29: tiktok распознаёт это и ставит ролику приватность «только я». оставлено для экспериментов, для заливки не включать",
     tag_inflated: "кадры раздуты",
@@ -120,6 +123,9 @@ const I18N = {
     warn_mask_incomplete: "masking incomplete: the encoder signature is still in the file",
     fps_uncapped: "uncapped fps",
     bpp: "bits/pixel",
+    ghost_name: "ghost audio track",
+    ghost_note: "adds a copy of the audio with ten times the sample count: an estimator sees 172 seconds instead of 17 and underrates the bitrate. video is untouched, fps stays honest, the file plays fine",
+    tag_ghost: "audio inflated",
     inflate_name: "frame inflation",
     inflate_note: "DANGEROUS. the container claims ten times more frames so the bitrate looks low. verified 2026-08-29: tiktok detects this and forces the video to private. kept for experiments, do not use for real uploads",
     tag_inflated: "frames inflated",
@@ -297,7 +303,7 @@ function rowHTML(item, idx) {
     const saved = (info ? info.size : 0) - item.after.size;
     if (saved > 0) parts.push("<b>-" + fmtSize(saved) + "</b>");
     if (item.copied) parts.push(esc(t("tag_copied")));
-    if (item.patch && item.patch.fake_frames) parts.push(esc(t("tag_inflated")));
+    if (item.patch && item.patch.ghost_samples) parts.push(esc(t("tag_ghost")));
   }
   const meta = parts.length ? `<div class="row-meta">${parts.join("<span></span>")}</div>` : "";
 
@@ -413,7 +419,7 @@ async function start() {
     const r = await api("/api/process", {
       paths: batch.map((q) => q.path),
       mode: state.mode,
-      inflate: $("#inflate").checked ? INFLATE_MULT : 0,
+      ghost: $("#ghost").checked ? GHOST_MULT : 0,
     });
     if (r.error) {
       showNotice(r.error);
@@ -540,10 +546,10 @@ function init() {
     if (b) applyLang(b.dataset.lang);
   });
 
-  const inflateBox = $("#inflate");
-  inflateBox.checked = localStorage.getItem("inflate") === "1";
-  inflateBox.addEventListener("change", () =>
-    localStorage.setItem("inflate", inflateBox.checked ? "1" : "0"));
+  const ghostBox = $("#ghost");
+  ghostBox.checked = localStorage.getItem("ghost") !== "0";
+  ghostBox.addEventListener("change", () =>
+    localStorage.setItem("ghost", ghostBox.checked ? "1" : "0"));
 
   $("#modes").addEventListener("click", (e) => {
     const b = e.target.closest("[data-mode]");

@@ -109,7 +109,27 @@ bitstream without re-encoding:
 Decoded frames after masking are bit-for-bit identical to the original, verified
 by comparing the MD5 of every frame before and after.
 
-## Frame count inflation
+## Ghost audio track
+
+Reverse-engineered from a working patcher's output (2026-08-29). A third track is
+added to `moov`: a copy of the audio whose sample count is ten times higher - 809
+real samples plus 7281 dummy ones, each one tick long. The dummy samples sit in a
+single chunk in the file tail at 8 bytes each, 58 KB for the whole clip.
+
+The point is that an estimator computes audio duration as sample count times 1024
+divided by the sample rate. For the clone that yields 172 seconds instead of 17,
+and the observed bitrate drops tenfold. Meanwhile:
+
+- the video track is untouched, `fps` stays honest (no 600 FPS);
+- the clone's real duration grows by only 0.15 s, because the dummy samples have a
+  delta of one tick rather than 1024;
+- players use the first audio track and never trip over the clone, and the file
+  decodes without a single error.
+
+That is exactly what separates this from frame count inflation, which TikTok
+catches.
+
+## Frame count inflation (do not use)
 
 A separate toggle in the UI. Dummy samples are appended to the video track's
 `stsz`, `stts`, `stsc` and `stco` tables: the container starts claiming ten times
