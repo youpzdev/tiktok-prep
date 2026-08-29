@@ -6,7 +6,8 @@
 #      filler_payload той же длины - длина NAL сохраняется, таблицы stsz/stco
 #      остаются валидными, декодированные кадры не меняются.
 #   2. в compressorname пишется имя энкодера (MediaInfo читает его как
-#      Encoded_Library).
+#      Encoded_Library), а бокс btrt удаляется: он объявляет реальный битрейт
+#      явными числами и перебивает любые ухищрения с длительностью.
 #   3. Тег ©too ("Lavf<version>") заменяется на JSON-строку редактора;
 #      moov растёт, поэтому оффсеты чанков во всех треках пересчитываются.
 # Реэнкод не выполняется - декодированные кадры остаются побитово теми же.
@@ -17,7 +18,7 @@ import struct
 
 from mp4boxes import (Mp4Error, _child, _find, _parse, _serialize, _stco_read,
                       _stco_write, _set_compressorname, _stsc_append, _stsz_append,
-                      _stsz_info, _stts_append, _stts_last_delta)
+                      _stsz_info, _stts_append, _stts_last_delta, _strip_entry_box)
 
 X264_SEI_UUID = bytes.fromhex("dc45e9bde6d948b7962cd820d923eeef")
 ENCODER_MARKER = b"x264 - core"
@@ -278,8 +279,10 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
         raise Mp4Error("не найден moov или mdat")
 
     stsd_written = 0
+    btrt_removed = 0
     for stsd in _find(moov["children"], b"stsd"):
         stsd_written += _set_compressorname(stsd, sei_text)
+        btrt_removed += _strip_entry_box(stsd, b"btrt")
 
     too_set = False
     if too_value is not None:
@@ -348,4 +351,5 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
     return {"sei_replaced": sei_count, "compressorname": stsd_written,
             "too_set": too_set, "moov_growth": growth,
             "fake_frames": fake_frames, "ghost_samples": ghost_samples,
+            "btrt_removed": btrt_removed,
             "encoder_left": ENCODER_MARKER in out}

@@ -109,6 +109,14 @@ bitstream without re-encoding:
 Decoded frames after masking are bit-for-bit identical to the original, verified
 by comparing the MD5 of every frame before and after.
 
+## Removing the btrt box
+
+The key step, without which the rest is pointless. ffmpeg writes a `btrt` box into
+every track's `stsd`, declaring buffer size, maximum and average bitrate as plain
+numbers. While it is there, an estimator has no reason to compute anything from
+duration - it reads the real 16 Mbps straight from the container. The working
+patcher removes this box, and so do we now.
+
 ## Ghost audio track
 
 Reverse-engineered from a working patcher's output (2026-08-29). A third track is

@@ -153,6 +153,47 @@ def _stsc_append(box, first_chunk, samples_per_chunk, desc_index):
     box["data"] = bytes(d)
 
 
+AUDIO_ENTRY_HEADER = 36          # до вложенных боксов в AudioSampleEntry
+VISUAL_ENTRY_HEADER = 86         # то же для VisualSampleEntry
+
+
+def _strip_entry_box(stsd_box, drop_type):
+    """Убрать вложенный бокс (например btrt) из всех sample-entry в stsd.
+
+    btrt объявляет буфер, максимальный и средний битрейт явными числами. Пока он
+    на месте, любой оценщик читает настоящий битрейт прямо из контейнера, и
+    никакие ухищрения с длительностью на него не действуют.
+    """
+    d = bytearray(stsd_box["data"])
+    count = struct.unpack(">I", d[4:8])[0]
+    i = 8
+    removed = 0
+    for _ in range(count):
+        if i + 8 > len(d):
+            break
+        esize = struct.unpack(">I", d[i:i + 4])[0]
+        etype = bytes(d[i + 4:i + 8])
+        if esize < 8:
+            break
+        inner = i + (VISUAL_ENTRY_HEADER if etype in VISUAL_ENTRIES else AUDIO_ENTRY_HEADER)
+        j = inner
+        while j + 8 <= i + esize:
+            bsize = struct.unpack(">I", d[j:j + 4])[0]
+            btype = bytes(d[j + 4:j + 8])
+            if bsize < 8 or j + bsize > i + esize:
+                break
+            if btype == drop_type:
+                del d[j:j + bsize]
+                esize -= bsize
+                d[i:i + 4] = struct.pack(">I", esize)
+                removed += 1
+                continue
+            j += bsize
+        i += esize
+    stsd_box["data"] = bytes(d)
+    return removed
+
+
 def _set_compressorname(stsd_box, text):
     """Записать compressorname во все визуальные sample-entry.
 
