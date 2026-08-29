@@ -118,10 +118,13 @@ drops from 16.2 to 1.63 Mbps. `mvhd` and `mdhd` stay honest, real samples and
 `mdat` are untouched, and the dummy chunks point past the end of the file.
 
 The idea is that an estimator computing bitrate as size over duration sees a long
-and thin video and does not bother re-compressing it. This used to work before
-the algorithm changed, so whether to enable it is a question to verify on your own
-account. The cost: players complain about the empty samples, and playback outside
-TikTok may be broken.
+and thin video and does not bother re-compressing it.
+
+**This no longer works and should stay off.** Verified 2026-08-29 on a clean file
+with no giveaway signatures at all: TikTok recognises such a container and forces
+the video to "only me" privacy. That also answers the old question of what got
+the videos hidden before - it was the inflation, not the tags. The toggle is kept
+for experiments only.
 
 ## Modes
 
