@@ -230,8 +230,6 @@ button { font: inherit; color: inherit; }
   font-weight: 600;
 }
 
-.toggle input:checked ~ span .toggle-name { color: var(--err); }
-
 .toggle-note {
   display: block;
   margin-top: 0.25rem;

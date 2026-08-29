@@ -181,7 +181,7 @@ PROFILES = {
         "max_long": _env("S_LONG", 1920, int),
         "max_fps": _env("S_FPS", 60.0, float),
         "crf": _env("S_CRF", 16, int),
-        "bpp": _env("S_BPP", 0.207, float),
+        "bpp": _env("S_BPP", 0.232, float),   # 18 Мбит/с на 1080p60: проверено заливкой
         "maxrate": _env("S_MAXRATE", "31948k"),
         "bufsize": _env("S_BUFSIZE", "63896k"),
         "preset": _env("S_PRESET", "slow"),
