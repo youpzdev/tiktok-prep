@@ -437,6 +437,15 @@ def process_job(job_id: str):
                     spawn_error = str(e)
                     break
                 job["proc"] = proc
+                # stderr вычитывается параллельно. Читать его после stdout нельзя:
+                # ffmpeg на разговорчивом файле забивает буфер трубы и блокируется
+                # на записи, а мы в это время ждём строку прогресса, которой уже не
+                # будет. Задача висит вечно.
+                err_parts = []
+                err_reader = threading.Thread(
+                    target=lambda: err_parts.append(proc.stderr.read() or ""),
+                    daemon=True)
+                err_reader.start()
                 for line in proc.stdout:
                     if job.get("cancelled"):
                         proc.terminate()
@@ -451,8 +460,9 @@ def process_job(job_id: str):
                             pass
                     elif line.startswith("speed="):
                         item["speed"] = line.split("=")[1].strip()
-                stderr = proc.stderr.read() if proc.stderr else ""
                 proc.wait()
+                err_reader.join(timeout=5)
+                stderr = "".join(err_parts)
                 job["proc"] = None
                 returncode = proc.returncode
                 if returncode != 0:
