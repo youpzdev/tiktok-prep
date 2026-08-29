@@ -2,10 +2,11 @@
 # мобильного редактора (эталон MediaInfo: EditingVC1 / TikTok Editing).
 #
 # Что делает mask():
-#   1. SEI user_data_unregistered с полной строкой настроек x264 заменяется на
-#      короткую строку энкодера + filler_payload той же длины - длина NAL
-#      сохраняется, таблицы stsz/stco остаются валидными, битстрим не меняется.
-#   2. compressorname в stsd обнуляется.
+#   1. SEI user_data_unregistered с полной строкой настроек x264 затирается
+#      filler_payload той же длины - длина NAL сохраняется, таблицы stsz/stco
+#      остаются валидными, декодированные кадры не меняются.
+#   2. в compressorname пишется имя энкодера (MediaInfo читает его как
+#      Encoded_Library).
 #   3. Тег ©too ("Lavf<version>") заменяется на JSON-строку редактора;
 #      moov растёт, поэтому оффсеты чанков во всех треках пересчитываются.
 # Реэнкод не выполняется - декодированные кадры остаются побитово теми же.
@@ -15,11 +16,11 @@ import os
 import struct
 
 from mp4boxes import (Mp4Error, _child, _find, _parse, _serialize, _stco_read,
-                        _stco_write, _zero_compressorname)
+                      _stco_write, _set_compressorname)
 
 X264_SEI_UUID = bytes.fromhex("dc45e9bde6d948b7962cd820d923eeef")
 ENCODER_MARKER = b"x264 - core"
-MASK_SEI_UUID = bytes.fromhex("7b1e4c9a3f52d84b91c6ae23f7d5b168")
+FOOTER_PATTERN = bytes.fromhex("0000000400000000")
 FULL_BOXES = {b"meta"}
 
 
@@ -54,26 +55,24 @@ def _fit_filler(rest):
     return None
 
 
-def _build_sei(total_len, uuid16, text):
-    """SEI NAL ровно total_len байт: user_data_unregistered + filler_payload."""
-    for pad in range(0, 4):
-        body = uuid16 + text.encode("ascii") + b" " * pad
-        head = b"\x06\x05" + _enc_size(len(body)) + body
-        rest = total_len - len(head) - 1       # -1 на rbsp_stop_one_bit (0x80)
-        if rest < 0:
-            continue
-        filler = _fit_filler(rest)
-        if filler is None:
-            continue
-        nal = head + filler + b"\x80"
-        if len(nal) != total_len:
-            raise Mp4Error(f"SEI собран неверно: {len(nal)} != {total_len}")
-        return nal
-    raise Mp4Error("строка энкодера не укладывается в исходный SEI")
+def _blank_sei(total_len):
+    """SEI NAL ровно total_len байт, состоящий только из filler_payload."""
+    filler = _fit_filler(total_len - 2)        # -1 на NAL header, -1 на 0x80
+    if filler is None:
+        raise Mp4Error(f"не удалось собрать filler на {total_len} байт")
+    nal = b"\x06" + filler + b"\x80"
+    if len(nal) != total_len:
+        raise Mp4Error(f"SEI собран неверно: {len(nal)} != {total_len}")
+    return nal
 
 
-def _mask_sei(data, sei_text):
-    """Заменить все x264-SEI на строку sei_text. Длины сэмплов не меняются."""
+def _mask_sei(data):
+    """Вычистить x264-SEI, заменив его на filler той же длины.
+
+    У нативного экспорта в потоке нет ни одного user_data_unregistered, поэтому
+    подпись не подменяется, а исчезает. Длина NAL сохраняется, так что таблицы
+    stsz и stco остаются валидными, а кадры декодируются побитово так же.
+    """
     buf = bytearray(data)
     replaced = 0
     pos = 0
@@ -92,7 +91,7 @@ def _mask_sei(data, sei_text):
         nal_len = struct.unpack(">I", buf[start - 4:start])[0]
         if start + nal_len > len(buf):
             continue
-        buf[start:start + nal_len] = _build_sei(nal_len, MASK_SEI_UUID, sei_text)
+        buf[start:start + nal_len] = _blank_sei(nal_len)
         replaced += 1
         pos = start + nal_len
     return bytes(buf), replaced
@@ -155,11 +154,15 @@ def encoder_json(maxrate_bps, creation_id, creation_time):
     })
 
 
-def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None):
+def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
+         footer=False):
+    """sei_text уходит в compressorname (MediaInfo показывает его как
+    Encoded_Library). Сам SEI с настройками x264 вычищается: у нативного
+    экспорта в потоке нет ни одного user_data_unregistered."""
     with open(in_path, "rb") as f:
         data = f.read()
 
-    data, sei_count = _mask_sei(data, sei_text)
+    data, sei_count = _mask_sei(data)
 
     tree = _parse(data, 0, len(data))
     top_types = [b["type"] for b in tree]
@@ -167,10 +170,9 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None):
     if moov is None or b"mdat" not in top_types:
         raise Mp4Error("не найден moov или mdat")
 
-    stsd_zeroed = 0
+    stsd_written = 0
     for stsd in _find(moov["children"], b"stsd"):
-        if _zero_compressorname(stsd):
-            stsd_zeroed += 1
+        stsd_written += _set_compressorname(stsd, sei_text)
 
     too_set = False
     if too_value is not None:
@@ -178,18 +180,35 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None):
         if udta is not None and "data" in udta:
             udta["data"], too_set = _set_ilst_tag(udta["data"], b"\xa9too", too_value)
 
+    # У нативного экспорта между moov и mdat нет ничего: пустой free-бокс от
+    # faststart выкидываем, а сдвиг медиаданных считаем по фактической позиции
+    # mdat, а не по одному лишь росту moov.
+    mdat = next(b for b in tree if b["type"] == b"mdat")
+    mdat_before = mdat["start"]
+    tree = [b for b in tree if not (b["type"] in (b"free", b"skip")
+                                    and b["start"] < mdat_before)]
+    mdat_after = sum((len(_serialize([b])) if "children" in b else b["header"] + len(b["data"]))
+                     for b in tree[:tree.index(mdat)])
+    shift = mdat_after - mdat_before
     growth = len(_serialize([moov])) - moov["size"]
-    if growth and top_types.index(b"moov") < top_types.index(b"mdat"):
+    if shift:
         for box in list(_find(moov["children"], b"stco")) + list(_find(moov["children"], b"co64")):
             _, offs = _stco_read(box)
-            _stco_write(box, [o + growth for o in offs])
+            _stco_write(box, [o + shift for o in offs])
 
     out = _serialize(tree)                     # собираем до открытия файла:
+    if footer:
+        # В хвосте нативного экспорта лежит блок размером примерно с moov,
+        # заполненный повторяющимся паттерном: их muxer резервирует место под
+        # индекс и не дочищает остаток.
+        size = len(_serialize([moov]))
+        out += (FOOTER_PATTERN * (size // len(FOOTER_PATTERN) + 1))[:size]
+
     tmp_path = out_path + ".part"              # сбой не должен портить готовый выход
     with open(tmp_path, "wb") as f:
         f.write(out)
     os.replace(tmp_path, out_path)
 
-    return {"sei_replaced": sei_count, "stsd_zeroed": stsd_zeroed,
-            "too_set": too_set, "moov_growth": growth,
+    return {"sei_replaced": sei_count, "compressorname": stsd_written,
+            "too_set": too_set, "moov_growth": growth, "footer": bool(footer),
             "encoder_left": ENCODER_MARKER in out}

@@ -181,6 +181,7 @@ PROFILES = {
         "max_long": _env("S_LONG", 1920, int),
         "max_fps": _env("S_FPS", 60.0, float),
         "crf": _env("S_CRF", 16, int),
+        "bpp": _env("S_BPP", 0.207, float),
         "maxrate": _env("S_MAXRATE", "31948k"),
         "bufsize": _env("S_BUFSIZE", "63896k"),
         "preset": _env("S_PRESET", "slow"),
@@ -188,6 +189,7 @@ PROFILES = {
         "level": _env("S_LEVEL", "4.2"),
         "audio_bitrate": _env("S_ABR", "200k"),
         "reencode": "always",
+        "footer": True,
     },
     "max": {
         "label": "Max",
@@ -195,6 +197,7 @@ PROFILES = {
         "max_long": _env("M_LONG", 3840, int),
         "max_fps": _env("M_FPS", 0.0, float),      # 0 - не ограничивать
         "crf": _env("M_CRF", 14, int),
+        "bpp": _env("M_BPP", 0.26, float),
         "maxrate": _env("M_MAXRATE", "120M"),
         "bufsize": _env("M_BUFSIZE", "240M"),
         "preset": _env("M_PRESET", "slow"),
@@ -202,6 +205,7 @@ PROFILES = {
         "level": _env("M_LEVEL", ""),              # пусто - уровень выбирает x264
         "audio_bitrate": _env("M_ABR", "320k"),
         "reencode": _env("M_REENCODE", "auto"),
+        "footer": False,
     },
 }
 DEFAULT_MODE = _env("MODE", "stealth")
@@ -291,6 +295,26 @@ def build_command(src: str, dst: str, info: dict, profile: dict):
     return build_reencode_command(src, dst, info, profile)
 
 
+def target_rate_args(info: dict, profile: dict):
+    """Целевой битрейт вместо чистого CRF.
+
+    CRF 16 на 1080p60 давал около 7.8 Мбит/с при 16.1 у эталона, то есть вдвое
+    беднее картинку. Эталон держит примерно 0.207 бита на пиксель, поэтому
+    битрейт считается от фактического разрешения и частоты кадров и растёт
+    вместе с ними. CRF остаётся запасным вариантом, если размеры неизвестны.
+    """
+    bpp = profile.get("bpp") or 0
+    w, h = info.get("width") or 0, info.get("height") or 0
+    fps = info.get("fps") or 0
+    factor = min(1.0, profile["max_short"] / min(w, h), profile["max_long"] / max(w, h)) if w and h else 1.0
+    fps_cap = profile["max_fps"]
+    out_fps = min(fps, fps_cap) if fps_cap and fps else fps
+    if not (bpp and w and h and out_fps):
+        return ["-crf", str(profile["crf"])]
+    bits = bpp * (w * factor) * (h * factor) * out_fps
+    return ["-b:v", f"{int(bits / 1000)}k"]
+
+
 def build_reencode_command(src: str, dst: str, info: dict, profile: dict):
     """Реэнкод под выбранный профиль: вписывание в кадр без апскейла, x264 high,
     BT.709 в контейнере, AAC 48 кГц. Входные метаданные отбрасываются, тег
@@ -317,8 +341,9 @@ def build_reencode_command(src: str, dst: str, info: dict, profile: dict):
     if vf:
         cmd += ["-vf", ",".join(vf), "-sws_flags", SCALE_FLAGS]
     cmd += ["-c:v", "libx264", "-profile:v", "high",
-            "-preset", profile["preset"], "-crf", str(profile["crf"]),
-            "-maxrate", profile["maxrate"], "-bufsize", profile["bufsize"],
+            "-preset", profile["preset"]]
+    cmd += target_rate_args(info, profile)
+    cmd += ["-maxrate", profile["maxrate"], "-bufsize", profile["bufsize"],
             "-refs", str(profile["refs"]),
             "-pix_fmt", "yuv420p", "-fps_mode", "cfr",
             # эталон помечает BT.709 в контейнере - без этого плеер/TikTok угадывает
@@ -415,7 +440,8 @@ def process_job(job_id: str):
                         tmp, dst, sei_text=MASK_SEI,
                         too_value=mp4mask.encoder_json(MASK_MAXRATE_BPS,
                                                        random.randint(10 ** 8, 10 ** 9 - 1),
-                                                       time.time()))
+                                                       time.time()),
+                        footer=profile.get("footer", False))
                     break
                 except Exception as e:
                     # mask() пишет через .part и переименовывает, так что готовый
@@ -531,7 +557,8 @@ class Handler(BaseHTTPRequestHandler):
                            "max_short": v["max_short"],
                            "max_long": v["max_long"],
                            "max_fps": v["max_fps"],
-                           "crf": v["crf"]} for k, v in PROFILES.items()],
+                           "bpp": v.get("bpp"),
+                           "copies": v.get("reencode") == "auto"} for k, v in PROFILES.items()],
             })
         if path.startswith("/api/job/"):
             job_id = path.rsplit("/", 1)[1]

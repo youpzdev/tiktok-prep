@@ -102,13 +102,23 @@ def _stco_write(box, offs):
     box["data"] = bytes(body)
 
 
-def _zero_compressorname(stsd_box):
-    """Обнулить 32-байтное поле compressorname в первом визуальном sample-entry."""
+def _set_compressorname(stsd_box, text):
+    """Записать compressorname во все визуальные sample-entry.
+
+    Поле длиной 32 байта в формате Pascal-строки: длина, символы, паддинг нулями.
+    MediaInfo читает его как Encoded_Library, поэтому имя энкодера живёт именно
+    здесь. Пустой text обнуляет поле целиком.
+    """
+    raw = text.encode("ascii", "ignore")[:31]
+    if raw:
+        field = bytes([len(raw)]) + raw + bytes(31 - len(raw))
+    else:
+        field = bytes(32)
     d = bytearray(stsd_box["data"])
     # payload stsd: version+flags(4) + entry_count(4) + sample-entries
     i = 8
     entry_count = struct.unpack(">I", d[4:8])[0]
-    zeroed = False
+    written = 0
     for _ in range(entry_count):
         if i + 8 > len(d):
             break
@@ -118,13 +128,11 @@ def _zero_compressorname(stsd_box):
             # compressorname: смещение 50 внутри visual sample entry, длина 32
             start = i + 50
             if start + 32 <= len(d):
-                d[start:start + 32] = b"\x00" * 32
-                zeroed = True
+                d[start:start + 32] = field
+                written += 1
         if esize < 8:
             break
         i += esize
     stsd_box["data"] = bytes(d)
-    return zeroed
+    return written
 
-
-# ---------------------------------------------------------------- главная операция

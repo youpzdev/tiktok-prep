@@ -82,13 +82,18 @@ the container, AAC 48 kHz audio. Incoming metadata is dropped entirely.
 bitstream without re-encoding:
 
 1. **Encoder SEI.** The stream carries a `user_data_unregistered` payload with the
-   full x264 settings string. It is replaced with a short encoder string, and the
-   rest of the NAL is padded with `filler_payload`, so the length is preserved
-   byte for byte and the `stsz` and `stco` tables stay valid.
-2. **The `©too` tag.** ffmpeg always writes `Lavf<version>` there and ignores
-   `-metadata encoder=`, so the tag is rewritten afterwards; `moov` grows, so
-   chunk offsets in every track are recalculated.
-3. **compressorname.** The 32-byte field in `stsd` is zeroed.
+   full x264 settings string. It is overwritten with `filler_payload` of the same
+   length: a native export has no `user_data_unregistered` at all, so the
+   signature is removed rather than replaced. NAL length is preserved, so the
+   `stsz` and `stco` tables stay valid.
+2. **compressorname.** The encoder name goes into the 32-byte field in `stsd`.
+   That is where MediaInfo reads `Encoded_Library` from, not from SEI.
+3. **The `©too` tag.** ffmpeg always writes `Lavf<version>` there and ignores
+   `-metadata encoder=`, so the tag is rewritten afterwards.
+4. **File structure.** The empty `free` box ffmpeg leaves after faststart is
+   dropped, and a block the size of `moov` is appended to the tail: that is the
+   box order a native export has. Chunk offsets in every track are recalculated
+   from the actual `mdat` shift.
 
 Decoded frames after masking are bit-for-bit identical to the original, verified
 by comparing the MD5 of every frame before and after.
@@ -99,8 +104,13 @@ by comparing the MD5 of every frame before and after.
 |---|---|---|
 | Resolution | up to 1080x1920 | up to 3840x2160 |
 | Frame rate | up to 60 | uncapped |
-| CRF | 16 | 14 |
+| Bits per pixel | 0.207 | 0.26 |
 | H.264 level | 4.2 | encoder picks |
+
+Bitrate is driven by bits per pixel rather than CRF: CRF 16 produced about
+7.8 Mbps at 1080p60 against 16.1 in the reference, half the picture. The
+reference holds roughly 0.207 bits per pixel, so the bitrate is derived from the
+actual resolution and frame rate and scales with them.
 
 **Stealth** matches the parameters of a native export. The 1080 and 60 fps caps
 are not arbitrary: no mobile editor outputs 4K or 120+ fps, so such a file gives
