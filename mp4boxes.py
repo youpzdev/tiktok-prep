@@ -1,0 +1,130 @@
+# MP4 box tree: parsing, serialization and chunk-offset tables.
+#
+# Модуль знает только про структуру контейнера. Правки фингерпринта живут в
+# mp4mask.py, пайплайн - в app.py.
+
+import struct
+
+# Боксы-контейнеры, в которые нужно спускаться. Остальное - непрозрачные листья.
+CONTAINERS = {b"moov", b"trak", b"mdia", b"minf", b"stbl"}
+
+# Визуальные sample-entry, у которых есть поле compressorname.
+VISUAL_ENTRIES = {b"avc1", b"avc3", b"hev1", b"hvc1", b"av01", b"vp09", b"vp08",
+                  b"mp4v", b"encv", b"dvav", b"dvhe"}
+
+
+class Mp4Error(Exception):
+    pass
+
+
+# ---------------------------------------------------------------- box tree
+
+def _parse(data, start, end):
+    boxes = []
+    i = start
+    while i + 8 <= end:
+        size = struct.unpack(">I", data[i:i + 4])[0]
+        typ = data[i + 4:i + 8]
+        header = 8
+        if size == 1:
+            size = struct.unpack(">Q", data[i + 8:i + 16])[0]
+            header = 16
+        elif size == 0:
+            size = end - i
+        if size < header or i + size > end:
+            raise Mp4Error(f"битый бокс {typ!r} на позиции {i}")
+        box = {"type": typ, "header": header, "start": i, "size": size}
+        if typ in CONTAINERS:
+            box["children"] = _parse(data, i + header, i + size)
+        else:
+            box["data"] = data[i + header:i + size]  # payload без заголовка
+        boxes.append(box)
+        i += size
+    return boxes
+
+
+def _serialize(boxes):
+    out = bytearray()
+    for box in boxes:
+        if "children" in box:
+            payload = _serialize(box["children"])
+            header = 8  # контейнеры всегда пересчитываем как 32-бит
+        else:
+            payload = box["data"]
+            # Листья сохраняют исходную ширину заголовка, чтобы не сдвигать
+            # абсолютные оффсеты (критично для mdat).
+            header = box["header"]
+        total = header + len(payload)
+        if header == 16 or total >= 2 ** 32:
+            out += struct.pack(">I", 1) + box["type"] + struct.pack(">Q", 16 + len(payload))
+        else:
+            out += struct.pack(">I", total) + box["type"]
+        out += payload
+    return bytes(out)
+
+
+def _find(boxes, typ):
+    """Все боксы данного типа во всём поддереве."""
+    for b in boxes:
+        if b["type"] == typ:
+            yield b
+        if "children" in b:
+            yield from _find(b["children"], typ)
+
+
+def _child(box, typ):
+    for b in box.get("children", []):
+        if b["type"] == typ:
+            return b
+    return None
+
+
+# ---------------------------------------------------------------- stbl-таблицы
+
+def _stco_read(box):
+    """→ (is64, [offsets])"""
+    d = box["data"]
+    is64 = box["type"] == b"co64"
+    count = struct.unpack(">I", d[4:8])[0]
+    w = 8 if is64 else 4
+    fmt = ">Q" if is64 else ">I"
+    offs = [struct.unpack(fmt, d[8 + i * w:8 + i * w + w])[0] for i in range(count)]
+    return is64, offs
+
+
+def _stco_write(box, offs):
+    is64 = box["type"] == b"co64"
+    fmt = ">Q" if is64 else ">I"
+    body = bytearray(box["data"][:4])              # version + flags
+    body += struct.pack(">I", len(offs))
+    for o in offs:
+        body += struct.pack(fmt, o)
+    box["data"] = bytes(body)
+
+
+def _zero_compressorname(stsd_box):
+    """Обнулить 32-байтное поле compressorname в первом визуальном sample-entry."""
+    d = bytearray(stsd_box["data"])
+    # payload stsd: version+flags(4) + entry_count(4) + sample-entries
+    i = 8
+    entry_count = struct.unpack(">I", d[4:8])[0]
+    zeroed = False
+    for _ in range(entry_count):
+        if i + 8 > len(d):
+            break
+        esize = struct.unpack(">I", d[i:i + 4])[0]
+        etype = bytes(d[i + 4:i + 8])
+        if etype in VISUAL_ENTRIES:
+            # compressorname: смещение 50 внутри visual sample entry, длина 32
+            start = i + 50
+            if start + 32 <= len(d):
+                d[start:start + 32] = b"\x00" * 32
+                zeroed = True
+        if esize < 8:
+            break
+        i += esize
+    stsd_box["data"] = bytes(d)
+    return zeroed
+
+
+# ---------------------------------------------------------------- главная операция

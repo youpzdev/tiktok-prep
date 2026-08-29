@@ -2,111 +2,143 @@
 
 # TikTok Prep Tool
 
-Local video prep for TikTok: light compression + MP4 container patch.
-Quality survives, and every file is unique for duplicate-content detection.
+Local video prep for TikTok: compression plus MP4 container masking.
+Quality survives, and the file does not look processed.
 
 Python stdlib + ffmpeg · no cloud, no telemetry
 
-**by youpzdev** — [Telegram](https://t.me/youpzlabnsfw) · [TikTok](https://www.tiktok.com/@youpzdev)
+**by youpzdev** - [Telegram](https://t.me/youpzlabnsfw) · [TikTok](https://www.tiktok.com/@youpzdev)
 
 > [!IMPORTANT]
-> **This software is free. If anyone asks you to pay for it, you've been fucked over.**
+> **This software is free. If anyone charges you for it, you have been scammed.**
 
 ---
 
-## 💊 The problem
+## The problem
 
-I run a TikTok account posting edits on a certain topic. And I ran into the
-dumbest possible problem — **TikTok absolutely destroys quality**. It doesn't
-just compress it, it eats it. A 4K/60fps source came out as 720p/30fps at best.
+I run a TikTok account and post edits on a specific topic. And I ran into the
+dumbest possible problem: **TikTok destroys quality**. Not compresses, destroys.
+A 4K/60fps source came out as 720p/30fps at best.
 
-## 🔍 Looking for a fix
+## Looking for a fix
 
-### Attempt 1 — upload via TikTok Studio
+### Attempt 1, upload through TikTok Studio
 
-The dumbest solution that came to mind first. After a couple of tries I realised
-it changes nothing. And the nastiest part: when you upload from your own device,
-the video stays **in your cache** — it looks crisp to you and like garbage to
-everyone else. A nice little trap.
+The first and dumbest idea. A couple of tries later it was clear nothing changes.
+The nasty part: a video uploaded from your device stays **in your cache**, so it
+looks sharp to you and mangled to everyone else.
 
-I googled for ready-made solutions — there are paid ones and free ones, but all
-sketchy: you upload your video to some random site, nobody explains anything, and
-after a wait it hands you back a patched file. The size drops a lot thanks to
-compression.
+I also looked at ready-made tools. Some paid, some free but sketchy: upload your
+video to a random site, get no explanation, and receive a patched file back with
+the size cut down by compression.
 
-### Attempt 2 — my own converter
+### Attempt 2, my own converter
 
-I wrote a converter that lowered the bitrate, changed the codec and downgraded
-the video to FullHD: from **86 MB down to 15 MB**. The bitrate changed too. But
-surprisingly, **it didn't help** — after publishing, the video still looked like
-garbage.
+I wrote a converter that lowered the bitrate, changed the codec and downscaled to
+Full HD: **86 MB to 15 MB**. The bitrate changed too. Surprisingly **it did not
+help**, the published video still looked awful.
 
-### Attempt 3 — patching the metadata ✅
+### Attempt 3, frame count inflation
 
-I started digging through the metadata of patched videos and noticed an
-interesting pattern. Say the source video has **1073 frames** — but the file
-claims there are **10× more**. That was the piece I had been missing.
+Digging through the metadata of patched videos, I noticed a pattern: the source
+had 1073 frames, while the file claimed ten times more. I rebuilt the tool around
+that scheme, and quality-wise it worked.
 
-So I reworked my tool: the app strips every marker, gets around the repeat-upload
-detection, and writes in its own tag with a unique number so that every video is
-one of a kind. And, drum roll... **it worked.**
+Then a different problem showed up: **TikTok started hiding those videos**. The
+file is valid, it plays, it uploads, and it gets no reach. An inflated frame count
+produces something a normal export never has: the declared track duration does not
+match the actual content. On top of that, ffmpeg signs its own work.
 
-## 🤔 Why it works (a guess)
+### Attempt 4, masking as a native export
 
-I don't know the exact reason and I won't claim anything — this isn't my stack at
-all. But here's my guess.
+I took the MediaInfo of a real video that performed fine and compared it with my
+output field by field. The difference was in the signatures, not in the picture:
 
-TikTok seems to decide whether a video needs compressing **based on bitrate**:
-
-| | What TikTok sees | Reaction |
+| | Native export | My output (before) |
 |---|---|---|
-| **Without the patch** | 16 MB ÷ 18 sec ≈ **7.5 Mbps** | "too fat" → compresses immediately |
-| **With the patch** | 16 MB ÷ "178 sec" ≈ **0.7 Mbps** | "already trash" → leaves it alone |
+| Encoded_Library | `EditingVC1-v1.5.0.2` | `x264 - core 164 ... options: cabac=1 ref=4 crf=...` |
+| Encoded_Application | editor JSON | `Lavf61.7.100` |
+| Tags | Performer only | `Patched by method.youpzdev - <id>` |
+| Frame count | matches duration | inflated tenfold |
 
-Because of the inflated frame counter, the file pretends to be long and skinny.
-The algorithm decides the video is already low quality and **doesn't touch it**.
-Meanwhile the real 1080p sits inside and reaches the feed almost untouched.
+The file was literally signed with the word Patched and the full encoder settings
+string. Those fields are now rewritten to match a native export, and frame count
+inflation is gone entirely.
 
-## ⚙️ What the tool does
+## Why it works (a guess)
 
-**Step 1 — compression.** Downscale to fit the TikTok frame (short side ≤1080,
-long side ≤1920; 2160×2160 → 1080×1080) + x264 high / preset medium / CRF 22 /
-VBV 15 Mbps + AAC 48 kHz audio. Metadata is wiped and rewritten with branding and
-a unique ID. **~89 MB → ~16 MB.**
+I do not know the real reason and will not pretend otherwise, this is not my
+stack. My guess: reading metadata is cheaper for the platform than analysing the
+picture. An x264 settings string in SEI, `Lavf` in the `©too` tag and a frame
+count that does not add up are markers a regular user never produces. With those
+gone, the file passes as an ordinary editor export.
 
-**Step 2 — container patch** ([mp4inflate.py](mp4inflate.py)) — editing the MP4
-boxes directly, with no re-encoding:
+## What the tool does
 
-1. **Frame count inflation** — ×9 dummy samples of size 8 are appended to `stsz`,
-   and an entry `(9657, 256)` to `stts`. The container now reports ×10 frames.
-2. **Dummy chunks** — one chunk per dummy sample is added to `stco` (all pointing
-   at the trailing `free` box), and `stsc` gets an entry `(real_chunks+1, 1, 1)`.
-   `mdat` doesn't grow at all, and the real chunk offsets are consistently shifted
-   by however much `moov` grew.
-3. **Fingerprint wipe** — the 32-byte `compressorname` field in `stsd` is zeroed,
-   and a unique ID of the form `<timestamp>_<hex>` goes into the tags — so no two
-   outputs are ever identical, even from the same source.
+**Step 1, compression.** Downscale to fit without upscaling, x264 high, BT.709 in
+the container, AAC 48 kHz audio. Incoming metadata is dropped entirely.
 
-Everything is exposed as constants at the top of `app.py`: `FRAME_MULTIPLIER`,
-`CRF`, `MAXRATE`, `PRESET`, `AUDIO_BITRATE`, `BRAND`.
+**Step 2, container masking** ([mp4mask.py](mp4mask.py)), editing boxes and the
+bitstream without re-encoding:
 
-## 🚀 Running it
+1. **Encoder SEI.** The stream carries a `user_data_unregistered` payload with the
+   full x264 settings string. It is replaced with a short encoder string, and the
+   rest of the NAL is padded with `filler_payload`, so the length is preserved
+   byte for byte and the `stsz` and `stco` tables stay valid.
+2. **The `©too` tag.** ffmpeg always writes `Lavf<version>` there and ignores
+   `-metadata encoder=`, so the tag is rewritten afterwards; `moov` grows, so
+   chunk offsets in every track are recalculated.
+3. **compressorname.** The 32-byte field in `stsd` is zeroed.
 
-Double-click `start.bat` (or run `python app.py`) — it opens
-`http://127.0.0.1:8765`. **Drop a video → hit START → grab the result.**
+Decoded frames after masking are bit-for-bit identical to the original, verified
+by comparing the MD5 of every frame before and after.
 
-You need **ffmpeg** (one-time install):
+## Modes
+
+| | Stealth | Max |
+|---|---|---|
+| Resolution | up to 1080x1920 | up to 3840x2160 |
+| Frame rate | up to 60 | uncapped |
+| CRF | 16 | 14 |
+| H.264 level | 4.2 | encoder picks |
+
+**Stealth** matches the parameters of a native export. The 1080 and 60 fps caps
+are not arbitrary: no mobile editor outputs 4K or 120+ fps, so such a file gives
+the processing away by itself.
+
+**Max** is for when quality matters more than blending in. If the stream is
+already H.264 8-bit and fits the limits, it is **copied without re-encoding**: the
+picture stays bit-for-bit identical and the job takes a fraction of a second.
+Re-encoding kicks in only when the video has to be downscaled or converted from
+another format. The reason is simple: re-encoding finished H.264 is a second
+generation of loss on top of what TikTok adds on upload. Metadata masking still
+applies, but a file like this cannot pass as a native export.
+
+Every parameter can be overridden with environment variables, no code edits
+needed: `TT_MODE`, `TT_S_CRF`, `TT_M_CRF`, `TT_S_MAXRATE`, `TT_BRAND`, `TT_SEI`,
+`TT_PORT` and the rest of the `PROFILES` block in `app.py`.
+
+## Running it
+
+Double-click `start.bat` (or run `python app.py`) and the page opens at
+`http://127.0.0.1:8765`. **Drop a video, pick a mode, hit start.**
+
+If the port is taken by another process, the server picks the next free one and
+says so in the console. An already running instance is reused instead of starting
+a second one.
+
+**ffmpeg** is required, once:
 
 ```
 winget install Gyan.FFmpeg
 ```
 
-The app finds ffmpeg on its own via winget, PATH, or a `bin/` folder next to it.
-There are no Python dependencies at all — standard library only.
+The app finds ffmpeg in winget, PATH or a local `bin/` folder on its own. There
+are no Python dependencies at all, only the standard library.
 
-## 📦 Output
+## Output
 
-Files land next to the source in a `tiktok_ready/` subfolder, named
+Files land next to the source in a `tiktok_ready/` subfolder as
 `<name>_tiktok.mp4`. Files dropped into the browser are copied to `incoming/`,
 with results in `incoming/tiktok_ready/`.
 
@@ -115,34 +147,32 @@ external servers.
 
 ---
 
-> ⚠️ This is an arms race. The trick works today, but TikTok keeps tuning its
-> algorithms — nobody can promise it lasts forever.
+> This is an arms race. The trick works today, but TikTok keeps tuning its
+> algorithms, and nobody can promise it lasts forever.
 
-## 🔎 Keywords and tags
+## Keywords and tags
 
 TikTok Prep Tool is a free local video optimizer for preparing and uploading
-TikTok videos while preserving quality. It processes MP4, 4K, Full HD,
-vertical videos, edits, clips, Shorts, and Reels locally with FFmpeg.
+clips to TikTok without losing quality. Handles MP4, 4K, Full HD and vertical
+video, edits, clips, Shorts and Reels through FFmpeg.
 
-`TikTok` · `Tik Tok` · `TikTok video` · `TikTok video optimizer` ·
-`TikTok quality` · `TikTok upload quality` · `TikTok video quality` ·
-`improve TikTok quality` · `preserve video quality` · `TikTok 4K` ·
-`TikTok 60 FPS` · `TikTok Full HD` · `1080p TikTok` · `vertical video` ·
-`prepare video for TikTok` · `video optimization` · `video compression` ·
-`quality-preserving video compression` · `video compressor` ·
+`TikTok` · `Tik Tok` · `TikTok video optimizer` · `TikTok quality` ·
+`TikTok upload quality` · `TikTok video quality` · `keep video quality` ·
+`TikTok 4K` · `TikTok 60 FPS` · `TikTok Full HD` · `1080p TikTok` ·
+`vertical video` · `video prep for TikTok` · `video optimization` ·
+`video compression` · `lossless-looking compression` · `video compressor` ·
 `video transcoder` · `MP4 optimizer` · `MP4 metadata` · `FFmpeg` ·
-`Python video tool` · `local video processing` · `offline video tool` ·
-`TikTok edits` · `TikTok clips` · `TikTok content creator` ·
-`TikTok uploader` · `TikTok compression fix` · `TikTok quality fix` ·
-`TikTok duplicate content` · `unique video` · `video fingerprint` ·
-`YouTube Shorts` · `Instagram Reels`
+`Python video tool` · `local video processing` · `no cloud` · `TikTok edits` ·
+`TikTok clips` · `TikTok content creator` · `TikTok uploader` ·
+`TikTok compression fix` · `TikTok quality fix` · `TikTok duplicate content` ·
+`unique video` · `video fingerprint` · `YouTube Shorts` · `Instagram Reels`
 
-## 📄 License
+## License
 
-This project is distributed under a [non-commercial license](LICENSE). Personal,
-educational, and research use is permitted. Sale, monetization, and use in
-commercial services, businesses, or work for paying clients are prohibited
-without the author's written permission.
+Distributed under a [non-commercial license](LICENSE). Personal, educational and
+research use is allowed. Selling, monetizing, use in commercial services, for
+business or paying clients is prohibited without written permission from the
+author.
 
-For a commercial license, contact [youpzdev on Telegram](https://t.me/youpzlabnsfw).
-Copyright © 2026 youpzdev. All rights reserved.
+For a commercial license: [Telegram](https://t.me/youpzlabnsfw).
+Copyright (c) 2026 youpzdev. All rights reserved.

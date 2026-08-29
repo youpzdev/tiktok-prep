@@ -1,8 +1,9 @@
-# TikTok Video Prep Tool — local server + ffmpeg pipeline
+# TikTok Video Prep Tool - local server + ffmpeg pipeline
 # Zero external Python dependencies (stdlib only).
 
 import json
 import os
+import random
 import re
 import shutil
 import socket
@@ -11,19 +12,28 @@ import sys
 import threading
 import time
 import urllib.parse
+import urllib.request
 import uuid
 import webbrowser
 from glob import glob
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import mp4inflate
+import mp4mask
+
+def _int_env(name, default):
+    try:
+        return int(os.environ.get(name) or default)
+    except ValueError:
+        return default
+
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 INCOMING_DIR = BASE_DIR / "incoming"   # files that arrive via browser drag&drop
 OUTPUT_SUBDIR = "tiktok_ready"
-PORT = 8765
+PORT = _int_env("TT_PORT", 8765)
+PORT_SCAN = 20
 
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".wmv", ".flv", ".ts", ".mts", ".m2ts", ".3gp", ".mpg", ".mpeg"}
 
@@ -66,7 +76,7 @@ def ffmpeg_version():
         return None
     try:
         out = subprocess.run([FFMPEG, "-version"], capture_output=True, text=True,
-                             creationflags=CREATE_NO_WINDOW).stdout
+                             creationflags=CREATE_NO_WINDOW, timeout=10).stdout
         m = re.search(r"ffmpeg version (\S+)", out)
         return m.group(1) if m else "unknown"
     except Exception:
@@ -78,7 +88,7 @@ def ffmpeg_version():
 def probe(path: str):
     refresh_binaries()
     if not FFPROBE:
-        return {"error": "ffprobe not found"}
+        return {"path": path, "error": "ffprobe не найден"}
     try:
         out = subprocess.run(
             [FFPROBE, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", path],
@@ -86,13 +96,13 @@ def probe(path: str):
             creationflags=CREATE_NO_WINDOW, timeout=60)
         data = json.loads(out.stdout or "{}")
     except Exception as e:
-        return {"error": str(e)}
+        return {"path": path, "error": str(e)}
 
     fmt = data.get("format", {})
     v = next((s for s in data.get("streams", []) if s.get("codec_type") == "video"), None)
     a = next((s for s in data.get("streams", []) if s.get("codec_type") == "audio"), None)
     if not v:
-        return {"error": "no video stream"}
+        return {"path": path, "error": "видеодорожка не найдена"}
 
     def fps_of(stream):
         for key in ("avg_frame_rate", "r_frame_rate"):
@@ -128,6 +138,7 @@ def probe(path: str):
         "fps": fps_of(v),
         "frames": as_int(v.get("nb_frames")),
         "vcodec": v.get("codec_name"),
+        "pix_fmt": v.get("pix_fmt"),
         "acodec": a.get("codec_name") if a else None,
         "audio_hz": int(a.get("sample_rate", 0) or 0) if a else None,
     }
@@ -137,26 +148,72 @@ def probe(path: str):
 JOBS = {}
 JOBS_LOCK = threading.Lock()
 
-# Во сколько раз добавить фиктивных кадров к реальным (itzcrih ≈ ×9 → ×10 всего).
-FRAME_MULTIPLIER = 9
+def _env(name, default, cast=str):
+    raw = os.environ.get("TT_" + name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return cast(raw)
+    except ValueError:
+        return default
 
-# Параметры компрессии (совпадают с itzcrih: x264 high/CRF22, VBV 15 Мбит/с).
-CRF = 22
-MAXRATE = 15            # Мбит/с (vbv_maxrate/vbv_bufsize)
-PRESET = "medium"
-AUDIO_BITRATE = "320k"  # itzcrih перекодирует аудио в AAC 48 кГц ~320 кбит/с
 
-# Брендинг-теги (переписываются на выходе, меняют фингерпринт).
-BRAND = "youpzdev"
-BRAND_TAGS = {
-    "artist": BRAND,
-    "album": f"{BRAND} Method",
-    "composer": BRAND,
-    "grouping": f"method.{BRAND}",
+# Апскейл запрещён в обоих режимах: кадры и пиксели не выдумываем.
+SCALE_FLAGS = _env("SWS", "lanczos+accurate_rnd+full_chroma_int")
+BRAND = _env("BRAND", "youpzdev")
+
+# Два режима с разными целями - совместить их в одном профиле нельзя.
+#
+# stealth: выход должен быть неотличим от нативного экспорта мобильного редактора.
+#   Эталон (MediaInfo, 2026-08-29): 1080×1200@60 CFR, AVC High L4.2, refs 4, CABAC,
+#   16.1 Мбит/с при потолке 31 948 000, BT.709 в контейнере, AAC LC CBR ~200 кбит/с,
+#   Encoded_Library "EditingVC1-v1.5.0.2", Encoded_Application - JSON редактора.
+#   Отсюда потолок 1080/60 и уровень 4.2: 4K или fps выше 60 такому экспорту
+#   не соответствуют ни одним полем и сами по себе выдают обработку.
+#
+# max: качество важнее незаметности - до 4K и fps без ограничения (до 300).
+#   Уровень H.264 отдаётся энкодеру, маскировка метаданных остаётся, но
+#   выдать такой файл за нативный экспорт невозможно.
+PROFILES = {
+    "stealth": {
+        "label": "Stealth",
+        "max_short": _env("S_SHORT", 1080, int),
+        "max_long": _env("S_LONG", 1920, int),
+        "max_fps": _env("S_FPS", 60.0, float),
+        "crf": _env("S_CRF", 16, int),
+        "maxrate": _env("S_MAXRATE", "31948k"),
+        "bufsize": _env("S_BUFSIZE", "63896k"),
+        "preset": _env("S_PRESET", "slow"),
+        "refs": _env("S_REFS", 4, int),
+        "level": _env("S_LEVEL", "4.2"),
+        "audio_bitrate": _env("S_ABR", "200k"),
+        "reencode": "always",
+    },
+    "max": {
+        "label": "Max",
+        "max_short": _env("M_SHORT", 2160, int),
+        "max_long": _env("M_LONG", 3840, int),
+        "max_fps": _env("M_FPS", 0.0, float),      # 0 - не ограничивать
+        "crf": _env("M_CRF", 14, int),
+        "maxrate": _env("M_MAXRATE", "120M"),
+        "bufsize": _env("M_BUFSIZE", "240M"),
+        "preset": _env("M_PRESET", "slow"),
+        "refs": _env("M_REFS", 4, int),
+        "level": _env("M_LEVEL", ""),              # пусто - уровень выбирает x264
+        "audio_bitrate": _env("M_ABR", "320k"),
+        "reencode": _env("M_REENCODE", "auto"),
+    },
 }
+DEFAULT_MODE = _env("MODE", "stealth")
+if DEFAULT_MODE not in PROFILES:
+    DEFAULT_MODE = "stealth"
+
+# Строка энкодера, которая уходит в SEI вместо настроек x264, и шаблон ©too.
+MASK_SEI = _env("SEI", "EditingVC1-v1.5.0.2")
+MASK_MAXRATE_BPS = _env("MASK_MAXRATE", 31948000, int)
 
 # 0xC0000005 access violation: флаки-сборки ffmpeg / Raptor Lake иногда падают
-# посреди энкода — та же команда обычно проходит с ретрая.
+# посреди энкода - та же команда обычно проходит с ретрая.
 CRASH_CODES = {3221225477, -1073741819}
 ENCODE_ATTEMPTS = 3
 
@@ -182,48 +239,103 @@ def _safe_rm(path):
         pass
 
 
-def _patch_id():
-    """ID вида <unix_ts>_<8 hex> — как у itzcrih (1784278661_2661d735)."""
-    return f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
+
+COPY_VCODECS = {"h264"}
+COPY_PIX_FMTS = {"yuv420p", "yuvj420p"}
+COPY_ACODECS = {"aac"}
 
 
-def build_command(src: str, dst: str, info: dict, uid: str):
-    """Компрессия без заметной потери качества: даунскейл во вписывание в кадр
-    TikTok + x264 CRF 22 (VBV 15 Мбит/с) + AAC 48 кГц. Метаданные обнуляются и
-    переписываются под брендинг."""
+def can_copy_stream(info: dict, profile: dict):
+    """Можно ли отдать видеопоток как есть.
+
+    Реэнкод уже сжатого H.264 - это вторая генерация потерь поверх той, что
+    TikTok добавит при заливке. Если поток и так вписывается в лимиты профиля,
+    копирование сохраняет картинку побитово и занимает доли секунды.
+    """
+    if profile.get("reencode") != "auto":
+        return False
+    if info.get("vcodec") not in COPY_VCODECS:
+        return False
+    if info.get("pix_fmt") not in COPY_PIX_FMTS:
+        return False
+    w, h = info.get("width") or 0, info.get("height") or 0
+    if not w or not h:
+        return False
+    if min(w, h) > profile["max_short"] or max(w, h) > profile["max_long"]:
+        return False
+    fps_cap = profile["max_fps"]
+    if fps_cap and (info.get("fps") or 0) > fps_cap + 0.05:
+        return False
+    return True
+
+
+def build_copy_command(src: str, dst: str, info: dict):
+    """Ремукс без реэнкода: поток остаётся байт в байт, меняется только контейнер."""
+    cmd = [FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
+           "-progress", "pipe:1", "-nostats",
+           "-i", src, "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy"]
+    if info.get("acodec") in COPY_ACODECS:
+        cmd += ["-c:a", "copy"]
+    elif info.get("acodec"):
+        cmd += ["-c:a", "aac", "-profile:a", "aac_low", "-ar", "48000", "-ac", "2"]
+    cmd += ["-map_metadata", "-1", "-metadata", f"artist={BRAND}",
+            "-movflags", "+faststart", dst]
+    return cmd
+
+
+def build_command(src: str, dst: str, info: dict, profile: dict):
+    """Команда первого шага: копирование потока, если профиль это допускает,
+    иначе полный реэнкод."""
+    if can_copy_stream(info, profile):
+        return build_copy_command(src, dst, info)
+    return build_reencode_command(src, dst, info, profile)
+
+
+def build_reencode_command(src: str, dst: str, info: dict, profile: dict):
+    """Реэнкод под выбранный профиль: вписывание в кадр без апскейла, x264 high,
+    BT.709 в контейнере, AAC 48 кГц. Входные метаданные отбрасываются, тег
+    автора ставится здесь, остальная маскировка - на втором шаге."""
     vf = []
     w, h = info.get("width") or 0, info.get("height") or 0
     if w and h:
-        # fit: короткая сторона ≤1080, длинная ≤1920 (2160×2160 → 1080×1080)
-        factor = min(1.0, 1080 / min(w, h), 1920 / max(w, h))
+        factor = min(1.0,
+                     profile["max_short"] / min(w, h),
+                     profile["max_long"] / max(w, h))
         if factor < 1.0:
             tw = round(w * factor / 2) * 2
             th = round(h * factor / 2) * 2
             vf.append(f"scale={tw}:{th}")
         elif w % 2 or h % 2:
             vf.append("scale=trunc(iw/2)*2:trunc(ih/2)*2")
-    if (info.get("fps") or 0) > 60.05:
-        vf.append("fps=60")
+    fps_cap = profile["max_fps"]
+    if fps_cap and (info.get("fps") or 0) > fps_cap + 0.05:
+        vf.append(f"fps={fps_cap:g}")
 
     cmd = [FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
            "-progress", "pipe:1", "-nostats",
            "-i", src, "-map", "0:v:0", "-map", "0:a:0?"]
     if vf:
-        cmd += ["-vf", ",".join(vf)]
-    cmd += ["-c:v", "libx264", "-profile:v", "high", "-preset", PRESET, "-crf", str(CRF),
-            "-maxrate", f"{MAXRATE}M", "-bufsize", f"{MAXRATE}M", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-ar", "48000", "-b:a", AUDIO_BITRATE, "-ac", "2",
-            "-map_metadata", "-1"]
-    for k, v in BRAND_TAGS.items():
-        cmd += ["-metadata", f"{k}={v}"]
-    cmd += ["-metadata", f"copyright={BRAND} - {uid}",
-            "-metadata", f"comment=Patched by method.{BRAND} - {uid}"]
+        cmd += ["-vf", ",".join(vf), "-sws_flags", SCALE_FLAGS]
+    cmd += ["-c:v", "libx264", "-profile:v", "high",
+            "-preset", profile["preset"], "-crf", str(profile["crf"]),
+            "-maxrate", profile["maxrate"], "-bufsize", profile["bufsize"],
+            "-refs", str(profile["refs"]),
+            "-pix_fmt", "yuv420p", "-fps_mode", "cfr",
+            # эталон помечает BT.709 в контейнере - без этого плеер/TikTok угадывает
+            "-color_primaries", "bt709", "-color_trc", "bt709",
+            "-colorspace", "bt709", "-color_range", "tv",
+            "-c:a", "aac", "-profile:a", "aac_low", "-ar", "48000",
+            "-b:a", profile["audio_bitrate"], "-ac", "2",
+            "-map_metadata", "-1", "-metadata", f"artist={BRAND}"]
+    if profile["level"]:
+        cmd += ["-level", profile["level"]]
     cmd += ["-movflags", "+faststart", dst]
     return cmd
 
 
 def process_job(job_id: str):
     job = JOBS[job_id]
+    profile = PROFILES[job.get("mode", DEFAULT_MODE)]
     for item in job["files"]:
         if job.get("cancelled"):
             item["status"] = "cancelled"
@@ -242,46 +354,75 @@ def process_job(job_id: str):
         item["dst"] = dst
         item["status"] = "processing"
 
-        uid = _patch_id()
         tmp = str(out_dir / (Path(src).stem + f".enc.{uuid.uuid4().hex[:8]}.mp4"))
         duration = info.get("duration") or 0
-        cmd = build_command(src, tmp, info, uid)
+        item["copied"] = can_copy_stream(info, profile)
 
-        # --- шаг 1: компрессия (реэнкод) с прогрессом и ретраем на краш ffmpeg
-        returncode, stderr, spawn_error = None, "", None
-        for attempt in range(1, ENCODE_ATTEMPTS + 1):
-            item["attempt"] = attempt
-            item["progress"] = 0.0
-            try:
-                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                        text=True, encoding="utf-8", errors="replace",
-                                        creationflags=CREATE_NO_WINDOW)
-            except Exception as e:
-                spawn_error = str(e)
-                break
-            job["proc"] = proc
-            for line in proc.stdout:
-                if job.get("cancelled"):
-                    proc.terminate()
+        # Копирование потока годится не для любого h264: Annex-B без in-band
+        # SPS/PPS и часть .ts/.avi ffmpeg отказывается класть в mp4. Такой отказ
+        # не должен ронять файл - он откатывается на честный реэнкод.
+        plans = [build_command(src, tmp, info, profile)]
+        if item["copied"]:
+            plans.append(build_reencode_command(src, tmp, info, profile))
+
+        returncode, stderr, spawn_error, patch, mask_error = None, "", None, None, None
+        for plan_index, cmd in enumerate(plans):
+            if plan_index:
+                item["copied"] = False
+                log_ffmpeg(cmd, -1, "копирование потока не подошло, откат на реэнкод")
+            returncode, stderr, spawn_error, patch, mask_error = None, "", None, None, None
+            for attempt in range(1, ENCODE_ATTEMPTS + 1):
+                item["attempt"] = attempt
+                item["progress"] = 0.0
+                try:
+                    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                            text=True, encoding="utf-8", errors="replace",
+                                            creationflags=CREATE_NO_WINDOW)
+                except Exception as e:
+                    spawn_error = str(e)
                     break
-                line = line.strip()
-                if line.startswith("out_time_us=") or line.startswith("out_time_ms="):
-                    try:
-                        us = int(line.split("=")[1])
-                        if duration > 0:
-                            item["progress"] = min(0.95, (us / 1_000_000) / duration * 0.9)
-                    except ValueError:
-                        pass
-                elif line.startswith("speed="):
-                    item["speed"] = line.split("=")[1].strip()
-            stderr = proc.stderr.read() if proc.stderr else ""
-            proc.wait()
-            job["proc"] = None
-            returncode = proc.returncode
-            if returncode != 0:
-                log_ffmpeg(cmd, returncode, stderr)
-            if job.get("cancelled") or returncode == 0 or returncode not in CRASH_CODES:
+                job["proc"] = proc
+                for line in proc.stdout:
+                    if job.get("cancelled"):
+                        proc.terminate()
+                        break
+                    line = line.strip()
+                    if line.startswith("out_time_us=") or line.startswith("out_time_ms="):
+                        try:
+                            us = int(line.split("=")[1])
+                            if duration > 0:
+                                item["progress"] = min(0.95, (us / 1_000_000) / duration * 0.9)
+                        except ValueError:
+                            pass
+                    elif line.startswith("speed="):
+                        item["speed"] = line.split("=")[1].strip()
+                stderr = proc.stderr.read() if proc.stderr else ""
+                proc.wait()
+                job["proc"] = None
+                returncode = proc.returncode
+                if returncode != 0:
+                    log_ffmpeg(cmd, returncode, stderr)
+                if job.get("cancelled") or returncode == 0 or returncode not in CRASH_CODES:
+                    break
+            if job.get("cancelled") or spawn_error is not None:
                 break
+            if returncode == 0:
+                # маскировка входит в план: если она не смогла разобрать результат
+                # копирования, честнее пережать, чем отдать файл с ошибкой
+                item["progress"] = 0.97
+                try:
+                    patch = mp4mask.mask(
+                        tmp, dst, sei_text=MASK_SEI,
+                        too_value=mp4mask.encoder_json(MASK_MAXRATE_BPS,
+                                                       random.randint(10 ** 8, 10 ** 9 - 1),
+                                                       time.time()))
+                    break
+                except Exception as e:
+                    # mask() пишет через .part и переименовывает, так что готовый
+                    # файл от прошлого прогона здесь цел - удалять dst нельзя.
+                    log_ffmpeg(["mp4mask", tmp, dst], -1, str(e))
+                    mask_error = str(e)
+            _safe_rm(tmp)
 
         if job.get("cancelled"):
             item["status"] = "cancelled"
@@ -290,6 +431,7 @@ def process_job(job_id: str):
         if spawn_error is not None:
             item["status"] = "error"
             item["message"] = spawn_error
+            _safe_rm(tmp)
             continue
         if returncode != 0:
             item["status"] = "error"
@@ -301,18 +443,14 @@ def process_job(job_id: str):
             _safe_rm(tmp)
             continue
 
-        # --- шаг 2: патч контейнера (раздувание кадров + обнуление compressorname)
-        item["progress"] = 0.97
-        try:
-            stats = mp4inflate.inflate(tmp, dst, FRAME_MULTIPLIER)
-            item["patch"] = stats
-        except Exception as e:
-            log_ffmpeg(["mp4inflate", tmp, dst], -1, str(e))
+        if patch is None:
             item["status"] = "error"
-            item["message"] = f"патч контейнера: {e}"
+            item["message"] = f"маскировка контейнера: {mask_error}"
             _safe_rm(tmp)
-            _safe_rm(dst)
             continue
+        item["patch"] = patch
+        if patch.get("encoder_left") or not patch.get("too_set"):
+            item["warning"] = "mask_incomplete"
         _safe_rm(tmp)
 
         item["progress"] = 1.0
@@ -363,6 +501,7 @@ class Handler(BaseHTTPRequestHandler):
     def send_json(self, obj, code=200):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
+        self.send_header("X-App", SERVER_SIGNATURE)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -383,23 +522,30 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/status":
             refresh_binaries()
             return self.send_json({
+                "app": SERVER_SIGNATURE,
                 "ffmpeg": bool(FFMPEG), "ffprobe": bool(FFPROBE),
                 "version": ffmpeg_version(), "ffmpeg_path": FFMPEG,
+                "default_mode": DEFAULT_MODE,
+                "modes": [{"id": k,
+                           "label": v["label"],
+                           "max_short": v["max_short"],
+                           "max_long": v["max_long"],
+                           "max_fps": v["max_fps"],
+                           "crf": v["crf"]} for k, v in PROFILES.items()],
             })
         if path.startswith("/api/job/"):
             job_id = path.rsplit("/", 1)[1]
             job = JOBS.get(job_id)
             if not job:
                 return self.send_json({"error": "job not found"}, 404)
-            return self.send_json({
-                "status": job["status"],
-                "files": [{k: v for k, v in f.items() if k != "proc"} for f in job["files"]],
-            })
+            with JOBS_LOCK:
+                files = [dict(f) for f in job["files"]]
+            return self.send_json({"status": job["status"], "files": files})
         # static
         if path == "/":
             path = "/index.html"
         file = (STATIC_DIR / path.lstrip("/")).resolve()
-        if not str(file).startswith(str(STATIC_DIR)) or not file.is_file():
+        if not file.is_relative_to(STATIC_DIR) or not file.is_file():
             return self.send_json({"error": "not found"}, 404)
         body = file.read_bytes()
         self.send_response(200)
@@ -417,12 +563,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/browse":
             data = self.read_json()
             mode = data.get("mode", "files")
-            paths = native_dialog(mode)
-            if mode == "folder" and paths:
-                folder = paths[0]
+            picked = native_dialog(mode)
+            cancelled = not picked          # пустой выбор из диалога - это отмена,
+            paths = picked                  # а не "в папке нет видео"
+            if mode == "folder" and picked:
+                folder = picked[0]
                 paths = sorted(str(p) for p in Path(folder).iterdir()
                                if p.is_file() and p.suffix.lower() in VIDEO_EXTS)
-            return self.send_json({"paths": paths})
+            return self.send_json({"paths": paths, "cancelled": cancelled})
 
         if path == "/api/probe":
             data = self.read_json()
@@ -456,9 +604,13 @@ class Handler(BaseHTTPRequestHandler):
             paths = [p for p in data.get("paths", []) if os.path.isfile(p)]
             if not paths:
                 return self.send_json({"error": "нет файлов"}, 400)
+            mode = data.get("mode") or DEFAULT_MODE
+            if mode not in PROFILES:
+                return self.send_json({"error": f"неизвестный режим: {mode}"}, 400)
             job_id = uuid.uuid4().hex[:12]
             job = {
                 "status": "running",
+                "mode": mode,
                 "files": [{"src": p, "name": os.path.basename(p),
                            "status": "queued", "progress": 0.0} for p in paths],
             }
@@ -498,19 +650,49 @@ class Handler(BaseHTTPRequestHandler):
 # ---------------------------------------------------------------- main
 
 
+SERVER_SIGNATURE = "tiktok-prep-tool"
+
+
 def port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.4)
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
+def our_server_on(port: int) -> bool:
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=1.0) as r:
+            return r.headers.get("X-App") == SERVER_SIGNATURE
+    except Exception:
+        return False
+
+
+def resolve_port():
+    free = None
+    for port in range(PORT, PORT + PORT_SCAN):
+        if not port_in_use(port):
+            if free is None:
+                free = port
+            continue
+        if our_server_on(port):
+            return port, True
+    if free is None:
+        raise SystemExit(f"Не нашёл свободный порт в диапазоне {PORT}-{PORT + PORT_SCAN - 1}")
+    return free, False
+
+
 def main():
-    url = f"http://127.0.0.1:{PORT}/"
-    if port_in_use(PORT):
-        print(f"Сервер уже запущен — открываю {url}")
+    port, running = resolve_port()
+    if running:
+        url = f"http://127.0.0.1:{port}/"
+        print(f"Сервер уже запущен - открываю {url}")
         webbrowser.open(url)
         return
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"TikTok Video Prep Tool — {url}")
+    if port != PORT:
+        print(f"Порт {PORT} занят чужим процессом - беру {port}")
+    url = f"http://127.0.0.1:{port}/"
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    print(f"TikTok Video Prep Tool - {url}")
     print(f"ffmpeg: {FFMPEG or 'НЕ НАЙДЕН'}")
     threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
