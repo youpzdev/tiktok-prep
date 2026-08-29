@@ -212,6 +212,13 @@ DEFAULT_MODE = _env("MODE", "stealth")
 if DEFAULT_MODE not in PROFILES:
     DEFAULT_MODE = "stealth"
 
+# Раздувание счётчика кадров: контейнер заявляет во столько раз больше кадров,
+# из-за чего наблюдаемый битрейт выглядит низким и файл реже пережимают. Приём
+# работал до тех пор, пока файл заодно был подписан "Patched by ..." и строкой
+# настроек x264 - тогда ролики начали прятать. Подписей больше нет, так что
+# рычаг вынесен отдельным переключателем и проверяется независимо.
+INFLATE_DEFAULT = _env("INFLATE", 0, int)
+
 # Строка энкодера, которая уходит в SEI вместо настроек x264, и шаблон ©too.
 MASK_SEI = _env("SEI", "EditingVC1-v1.5.0.2")
 MASK_MAXRATE_BPS = _env("MASK_MAXRATE", 31948000, int)
@@ -364,6 +371,7 @@ def build_reencode_command(src: str, dst: str, info: dict, profile: dict):
 def process_job(job_id: str):
     job = JOBS[job_id]
     profile = PROFILES[job.get("mode", DEFAULT_MODE)]
+    inflate = int(job.get("inflate", 0) or 0)
     for item in job["files"]:
         if job.get("cancelled"):
             item["status"] = "cancelled"
@@ -444,7 +452,8 @@ def process_job(job_id: str):
                         too_value=mp4mask.encoder_json(MASK_MAXRATE_BPS,
                                                        random.randint(10 ** 8, 10 ** 9 - 1),
                                                        time.time()),
-                        footer=profile.get("footer", False))
+                        footer=profile.get("footer", False),
+                        inflate=inflate)
                     break
                 except Exception as e:
                     # mask() пишет через .part и переименовывает, так что готовый
@@ -555,6 +564,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ffmpeg": bool(FFMPEG), "ffprobe": bool(FFPROBE),
                 "version": ffmpeg_version(), "ffmpeg_path": FFMPEG,
                 "default_mode": DEFAULT_MODE,
+                "inflate_default": INFLATE_DEFAULT,
                 "modes": [{"id": k,
                            "label": v["label"],
                            "max_short": v["max_short"],
@@ -637,10 +647,15 @@ class Handler(BaseHTTPRequestHandler):
             mode = data.get("mode") or DEFAULT_MODE
             if mode not in PROFILES:
                 return self.send_json({"error": f"неизвестный режим: {mode}"}, 400)
+            try:
+                inflate = max(0, min(30, int(data.get("inflate", INFLATE_DEFAULT))))
+            except (TypeError, ValueError):
+                inflate = INFLATE_DEFAULT
             job_id = uuid.uuid4().hex[:12]
             job = {
                 "status": "running",
                 "mode": mode,
+                "inflate": inflate,
                 "files": [{"src": p, "name": os.path.basename(p),
                            "status": "queued", "progress": 0.0} for p in paths],
             }

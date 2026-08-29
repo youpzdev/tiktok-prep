@@ -4,6 +4,7 @@
 const $ = (s) => document.querySelector(s);
 
 const RESTARTABLE = new Set(["queued", "cancelled", "error"]);
+const INFLATE_MULT = 9;          // ×9 фиктивных к реальным, итого заявленных ×10
 
 const state = {
   queue: [],
@@ -66,6 +67,9 @@ const I18N = {
     warn_mask_incomplete: "маскировка неполная: подпись энкодера осталась в файле",
     fps_uncapped: "fps без потолка",
     bpp: "бит/пиксель",
+    inflate_name: "раздувание кадров",
+    inflate_note: "контейнер заявляет в 10 раз больше кадров, наблюдаемый битрейт выглядит низким и файл реже пережимают. приём работал раньше, проверяй на своём аккаунте",
+    tag_inflated: "кадры раздуты",
     unit_min: " мин", unit_sec: " с",
     gb: "гб", mb: "мб", kb: "кб", mbits: "мбит/с",
   },
@@ -116,6 +120,9 @@ const I18N = {
     warn_mask_incomplete: "masking incomplete: the encoder signature is still in the file",
     fps_uncapped: "uncapped fps",
     bpp: "bits/pixel",
+    inflate_name: "frame inflation",
+    inflate_note: "the container claims ten times more frames, so the observed bitrate looks low and the file gets re-compressed less often. this used to work, verify it on your own account",
+    tag_inflated: "frames inflated",
     unit_min: " min", unit_sec: " s",
     gb: "gb", mb: "mb", kb: "kb", mbits: "mbps",
   },
@@ -290,6 +297,7 @@ function rowHTML(item, idx) {
     const saved = (info ? info.size : 0) - item.after.size;
     if (saved > 0) parts.push("<b>-" + fmtSize(saved) + "</b>");
     if (item.copied) parts.push(esc(t("tag_copied")));
+    if (item.patch && item.patch.fake_frames) parts.push(esc(t("tag_inflated")));
   }
   const meta = parts.length ? `<div class="row-meta">${parts.join("<span></span>")}</div>` : "";
 
@@ -402,7 +410,11 @@ async function start() {
   $("#btn-start").disabled = true;
   try {
     if (!(await checkEngine())) return;
-    const r = await api("/api/process", { paths: batch.map((q) => q.path), mode: state.mode });
+    const r = await api("/api/process", {
+      paths: batch.map((q) => q.path),
+      mode: state.mode,
+      inflate: $("#inflate").checked ? INFLATE_MULT : 0,
+    });
     if (r.error) {
       showNotice(r.error);
       return;
@@ -527,6 +539,11 @@ function init() {
     const b = e.target.closest("[data-lang]");
     if (b) applyLang(b.dataset.lang);
   });
+
+  const inflateBox = $("#inflate");
+  inflateBox.checked = localStorage.getItem("inflate") === "1";
+  inflateBox.addEventListener("change", () =>
+    localStorage.setItem("inflate", inflateBox.checked ? "1" : "0"));
 
   $("#modes").addEventListener("click", (e) => {
     const b = e.target.closest("[data-mode]");

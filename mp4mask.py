@@ -16,7 +16,8 @@ import os
 import struct
 
 from mp4boxes import (Mp4Error, _child, _find, _parse, _serialize, _stco_read,
-                      _stco_write, _set_compressorname)
+                      _stco_write, _set_compressorname, _stsc_append, _stsz_append,
+                      _stsz_info, _stts_append, _stts_last_delta)
 
 X264_SEI_UUID = bytes.fromhex("dc45e9bde6d948b7962cd820d923eeef")
 ENCODER_MARKER = b"x264 - core"
@@ -154,8 +155,48 @@ def encoder_json(maxrate_bps, creation_id, creation_time):
     })
 
 
+def _video_stbl(moov):
+    for trak in _find(moov["children"], b"trak"):
+        mdia = _child(trak, b"mdia")
+        hdlr = _child(mdia, b"hdlr") if mdia else None
+        if hdlr and hdlr["data"][8:12] == b"vide":
+            node = trak
+            for t in (b"mdia", b"minf", b"stbl"):
+                node = _child(node, t)
+                if node is None:
+                    raise Mp4Error(f"в видеотреке нет бокса {t!r}")
+            return node
+    raise Mp4Error("видеотрек не найден")
+
+
+def _inflate_tables(moov, multiplier):
+    """Дописать фиктивные сэмплы в таблицы видеотрека.
+
+    Контейнер начинает заявлять во столько-то раз больше кадров при той же
+    длительности медиаданных, из-за чего наблюдаемый битрейт выглядит низким.
+    Реальные сэмплы и mdat не трогаются: фиктивные чанки указывают за конец
+    файла, а их размер задан минимальным.
+    """
+    stbl = _video_stbl(moov)
+    stsz, stts, stsc = _child(stbl, b"stsz"), _child(stbl, b"stts"), _child(stbl, b"stsc")
+    stco = _child(stbl, b"stco") or _child(stbl, b"co64")
+    if not all((stsz, stts, stsc, stco)):
+        raise Mp4Error("в видеотреке неполный набор таблиц stbl")
+    _, real_frames = _stsz_info(stsz)
+    if real_frames == 0:
+        raise Mp4Error("в видеотреке нет сэмплов")
+    fake = real_frames * int(multiplier)
+    delta = _stts_last_delta(stts) or 1
+    _, real_chunks = _stco_read(stco)
+    _stsz_append(stsz, fake, 8)
+    _stts_append(stts, fake, delta)
+    _stsc_append(stsc, len(real_chunks) + 1, 1, 1)
+    _stco_write(stco, real_chunks + [0] * fake)
+    return fake
+
+
 def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
-         footer=False):
+         footer=False, inflate=0):
     """sei_text уходит в compressorname (MediaInfo показывает его как
     Encoded_Library). Сам SEI с настройками x264 вычищается: у нативного
     экспорта в потоке нет ни одного user_data_unregistered."""
@@ -180,6 +221,8 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
         if udta is not None and "data" in udta:
             udta["data"], too_set = _set_ilst_tag(udta["data"], b"\xa9too", too_value)
 
+    fake_frames = _inflate_tables(moov, inflate) if inflate else 0
+
     # У нативного экспорта между moov и mdat нет ничего: пустой free-бокс от
     # faststart выкидываем, а сдвиг медиаданных считаем по фактической позиции
     # mdat, а не по одному лишь росту moov.
@@ -196,6 +239,20 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
             _, offs = _stco_read(box)
             _stco_write(box, [o + shift for o in offs])
 
+    if fake_frames:
+        # Фиктивные чанки все смотрят в один оффсет за концом медиаданных:
+        # mdat не растёт, реальные сэмплы не трогаются.
+        tail_offset = sum((len(_serialize([b])) if "children" in b else b["header"] + len(b["data"]))
+                          for b in tree)
+        stbl = _video_stbl(moov)
+        stco = _child(stbl, b"stco") or _child(stbl, b"co64")
+        is64, offs = _stco_read(stco)
+        if not is64 and tail_offset >= 2 ** 32:
+            raise Mp4Error("оффсет за 4 ГБ, нужен co64")
+        for k in range(len(offs) - fake_frames, len(offs)):
+            offs[k] = tail_offset
+        _stco_write(stco, offs)
+
     out = _serialize(tree)                     # собираем до открытия файла:
     if footer:
         # В хвосте нативного экспорта лежит блок размером примерно с moov,
@@ -211,4 +268,5 @@ def mask(in_path, out_path, sei_text="EditingVC1-v1.5.0.2", too_value=None,
 
     return {"sei_replaced": sei_count, "compressorname": stsd_written,
             "too_set": too_set, "moov_growth": growth, "footer": bool(footer),
+            "fake_frames": fake_frames,
             "encoder_left": ENCODER_MARKER in out}

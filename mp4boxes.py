@@ -102,6 +102,57 @@ def _stco_write(box, offs):
     box["data"] = bytes(body)
 
 
+def _stsz_info(box):
+    d = box["data"]
+    sample_size, count = struct.unpack(">II", d[4:12])
+    return sample_size, count
+
+
+def _stsz_append(box, n, size):
+    """Дописать n сэмплов размера size. Разворачивает constant-size в таблицу."""
+    d = bytearray(box["data"])
+    sample_size, count = struct.unpack(">II", d[4:12])
+    if sample_size != 0:
+        # constant-size → превращаем в явную таблицу
+        table = bytearray()
+        for _ in range(count):
+            table += struct.pack(">I", sample_size)
+        d = bytearray(d[:4]) + struct.pack(">II", 0, count) + table
+    for _ in range(n):
+        d += struct.pack(">I", size)
+    struct.pack_into(">I", d, 8, count + n)         # обновить sample_count
+    box["data"] = bytes(d)
+
+
+def _stts_last_delta(box):
+    d = box["data"]
+    count = struct.unpack(">I", d[4:8])[0]
+    if count == 0:
+        return None
+    off = 8 + (count - 1) * 8
+    return struct.unpack(">I", d[off + 4:off + 8])[0]
+
+
+def _stts_append(box, sample_count, delta):
+    d = bytearray(box["data"])
+    count = struct.unpack(">I", d[4:8])[0]
+    d += struct.pack(">II", sample_count, delta)
+    struct.pack_into(">I", d, 4, count + 1)
+    box["data"] = bytes(d)
+
+
+def _stsc_count(box):
+    return struct.unpack(">I", box["data"][4:8])[0]
+
+
+def _stsc_append(box, first_chunk, samples_per_chunk, desc_index):
+    d = bytearray(box["data"])
+    count = struct.unpack(">I", d[4:8])[0]
+    d += struct.pack(">III", first_chunk, samples_per_chunk, desc_index)
+    struct.pack_into(">I", d, 4, count + 1)
+    box["data"] = bytes(d)
+
+
 def _set_compressorname(stsd_box, text):
     """Записать compressorname во все визуальные sample-entry.
 
