@@ -201,13 +201,25 @@ class StoryPassthroughTests(unittest.TestCase):
         inspect.assert_not_called()
 
     def test_successful_hook_and_unload(self):
+        self.successful_hook_and_unload(False)
+
+    def test_java_class_wrapper_loads_and_applies_copy(self):
+        self.successful_hook_and_unload(True)
+
+    def successful_hook_and_unload(self, wrapped):
         fields = self.java_fields()
         method = types.SimpleNamespace(
             getName=lambda: "of", setAccessible=lambda value: None,
             getParameterTypes=lambda: [types.SimpleNamespace(getName=lambda n=n: n)
                                        for n in self.plugin.SIGNATURE])
         clazz = types.SimpleNamespace(getDeclaredMethods=lambda: [method],
-                                      getDeclaredField=lambda name: fields[name])
+                                      getDeclaredField=lambda name: fields[name],
+                                      getName=lambda: "org.telegram.messenger.video."
+                                      "MediaCodecVideoConvertor$ConvertVideoParams",
+                                      getClass=lambda: self.fail("direct Class must not unwrap"))
+        unwrap_calls = []
+        found = (types.SimpleNamespace(getClass=lambda: unwrap_calls.append(1) or clazz)
+                 if wrapped else clazz)
         plugin = self.plugin.StoryCopyPlugin()
         events = []
         plugin.log = events.append
@@ -216,9 +228,10 @@ class StoryPassthroughTests(unittest.TestCase):
         token = object()
         plugin.hook_method = lambda method, hook: installed.append(hook) or token
         plugin.unhook_method = removed.append
-        with patch.object(self.plugin, "find_class", return_value=clazz):
+        with patch.object(self.plugin, "find_class", return_value=found):
             plugin.on_plugin_load()
         self.assertTrue(plugin.active)
+        self.assertEqual(unwrap_calls, [1] if wrapped else [])
         self.assertEqual(len(installed), 1)
         self.assertTrue(plugin.status.startswith("Ready:"))
         target = types.SimpleNamespace(**self.params)
@@ -235,6 +248,35 @@ class StoryPassthroughTests(unittest.TestCase):
         self.assertFalse(plugin.active)
         self.assertEqual(removed, [token])
         installed[0].after_hooked_method(None)
+
+    def test_wrapper_cannot_redirect_to_another_class(self):
+        for name in ("java.lang.Class", "org.example.OtherConverter"):
+            with self.subTest(name=name):
+                reflected = types.SimpleNamespace(
+                    getName=lambda: name, getDeclaredMethods=lambda: [],
+                    getDeclaredField=lambda name: None)
+                wrapper = types.SimpleNamespace(getClass=lambda: reflected)
+                plugin = self.plugin.StoryCopyPlugin()
+                plugin.log = lambda message: None
+                plugin.hook_method = lambda *args: self.fail("unexpected hook")
+                with patch.object(self.plugin, "find_class", return_value=wrapper):
+                    plugin.on_plugin_load()
+                self.assertFalse(plugin.active)
+                self.assertIn("class normalization", plugin.status)
+                self.assertIn(name, plugin.status)
+
+    def test_wrapper_without_reflection_is_rejected(self):
+        name = "org.telegram.messenger.video.MediaCodecVideoConvertor$ConvertVideoParams"
+        for wrapper in (object(), types.SimpleNamespace(
+                getClass=lambda: types.SimpleNamespace(getName=lambda: name))):
+            with self.subTest(wrapper=wrapper):
+                plugin = self.plugin.StoryCopyPlugin()
+                plugin.log = lambda message: None
+                plugin.hook_method = lambda *args: self.fail("unexpected hook")
+                with patch.object(self.plugin, "find_class", return_value=wrapper):
+                    plugin.on_plugin_load()
+                self.assertFalse(plugin.active)
+                self.assertIn("class normalization", plugin.status)
 
     def test_incompatible_app_does_not_register_hook(self):
         method = types.SimpleNamespace(
