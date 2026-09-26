@@ -8,10 +8,10 @@ __id__ = "story_passthrough"
 __name__ = "Story Copy Test"
 __description__ = "Experimental upload test for prepared 720p story files."
 __author__ = "youpz"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __icon__ = "exteraPlugins/1"
 __app_version__ = ">=12.5.1"
-__sdk_version__ = ">=1.4.4.3"
+__sdk_version__ = ">=1.4.3.3"
 
 PARAM_FIELDS = (
     "isStory", "isPhoto", "isRound", "isSticker", "isSecret", "muted",

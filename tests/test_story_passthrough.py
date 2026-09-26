@@ -31,6 +31,13 @@ class StoryPassthroughTests(unittest.TestCase):
     def setUpClass(cls):
         cls.plugin = load_plugin()
 
+    def test_metadata_allows_installed_sdk(self):
+        requirement = self.plugin.__sdk_version__
+        self.assertTrue(requirement.startswith(">="))
+        minimum = tuple(int(part) for part in requirement[2:].split("."))
+        installed = (1, 4, 3, 3)
+        self.assertLessEqual(minimum, installed)
+
     def setUp(self):
         self.info = types.SimpleNamespace(
             isStory=True, isPhoto=False, roundVideo=False, isSticker=False,
