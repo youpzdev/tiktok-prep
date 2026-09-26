@@ -1,0 +1,314 @@
+import os
+
+from base_plugin import BasePlugin, MethodHook
+from hook_utils import find_class
+from ui.settings import Text
+
+__id__ = "story_passthrough"
+__name__ = "Story Copy Test"
+__description__ = "Experimental upload test for prepared 720p story files."
+__author__ = "youpz"
+__version__ = "0.1.0"
+__icon__ = "exteraPlugins/1"
+__app_version__ = ">=12.5.1"
+__sdk_version__ = ">=1.4.4.3"
+
+PARAM_FIELDS = (
+    "isStory", "isPhoto", "isRound", "isSticker", "isSecret", "muted",
+    "volume", "videoOffset", "rotationValue", "originalWidth", "originalHeight",
+    "resultWidth", "resultHeight", "startTime", "endTime", "avatarStartTime",
+    "videoPath", "needCompress", "bitrate", "soundInfos",
+)
+SIGNATURE = (
+    "java.lang.String", "java.io.File", "long", "int", "boolean", "int", "int",
+    "int", "int", "int", "int", "int", "long", "long", "long", "boolean",
+    "long", "org.telegram.messenger.MediaController$VideoConvertorListener",
+    "org.telegram.messenger.VideoEditedInfo",
+)
+
+
+def read_field(field, target):
+    kind = str(field.getType().getName())
+    if kind == "boolean":
+        return field.getBoolean(target)
+    if kind == "int":
+        return field.getInt(target)
+    if kind == "long":
+        return field.getLong(target)
+    if kind == "float":
+        return field.getFloat(target)
+    return field.get(target)
+
+
+def empty(items):
+    if items is None:
+        return True
+    return items.isEmpty() if hasattr(items, "isEmpty") else len(items) == 0
+
+
+def rejection(info, params, media):
+    if not info.isStory or not params["isStory"]:
+        return "not a story"
+    if int(info.wallpaperPeerId) != -9223372036854775808:
+        return "custom story background"
+    path = str(params["videoPath"])
+    if str(info.originalPath) != path:
+        return "source path changed"
+    name = os.path.basename(path).lower()
+    if not name.startswith("storycopy_") or not name.endswith(".mp4"):
+        return "use a prepared storycopy_ MP4 file"
+    for name in ("isPhoto", "roundVideo", "isSticker", "muted", "fromCamera"):
+        if bool(getattr(info, name)):
+            return "unsupported story mode: " + name
+    for name in ("isPhoto", "isRound", "isSticker", "muted"):
+        if bool(params[name]):
+            return "unsupported conversion mode: " + name
+    if float(info.volume) != 1.0 or float(params["volume"]) != 1.0:
+        return "audio volume edited"
+    if int(params["bitrate"]) <= 0:
+        return "audio copying disabled"
+    for name in ("videoOffset", "rotationValue"):
+        if int(getattr(info, name)) != 0 or int(params[name]) != 0:
+            return "rotation or video offset"
+    for name, expected in (("originalWidth", 720), ("resultWidth", 720),
+                           ("originalHeight", 1280), ("resultHeight", 1280)):
+        if int(getattr(info, name)) != expected or int(params[name]) != expected:
+            return "source and output must both be 720x1280"
+    for name in ("filterState", "paintPath", "blurPath", "messagePath",
+                 "messageVideoMaskPath", "backgroundPath", "collage"):
+        if getattr(info, name) is not None:
+            return "story has edits: " + name
+    hdr = info.hdrInfo
+    if hdr is not None and int(hdr.getHDRType()) != 0:
+        return "HDR source"
+    for name in ("mediaEntities", "mixedSoundInfos", "collageParts"):
+        if not empty(getattr(info, name)):
+            return "story has overlays or mixed audio"
+    if not empty(params["soundInfos"]):
+        return "conversion has mixed audio"
+    crop = info.cropState
+    if crop is not None:
+        if (not crop.isEmpty() or float(crop.cropPx) != 0.0
+                or float(crop.cropPy) != 0.0 or int(crop.orientation) != 0):
+            return "crop, zoom, mirror or transform"
+    if (int(info.avatarStartTime) != -1 or int(params["avatarStartTime"]) != -1
+            or int(info.startTime) not in (-1, 0)
+            or int(params["startTime"]) not in (-1, 0)):
+        return "trimmed start"
+    duration = int(info.originalDuration)
+    for end in (int(info.endTime), int(params["endTime"])):
+        if end not in (-1, duration):
+            return "trimmed end"
+    if not 0 < media["size"] <= 30000000:
+        return "file exceeds 30 MB"
+    if media["tracks"] != 2 or media["video_mime"] != "video/avc":
+        return "expected one H264 video and one AAC audio track"
+    if media["audio_mime"] != "audio/mp4a-latm":
+        return "expected AAC audio"
+    if media["audio_profile"] != 2:
+        return "expected AAC-LC audio"
+    if (media["width"], media["height"], media["rotation"]) != (720, 1280, 0):
+        return "actual media size or rotation unsupported"
+    if media["hdr"] or not 1 <= media["fps"] <= 60.01:
+        return "HDR or unsupported frame rate"
+    if not 0 < media["duration_us"] <= 60000000:
+        return "duration exceeds 60 seconds"
+    if abs(media["duration_us"] - duration) > 100000:
+        return "source duration mismatch"
+    if abs(media["audio_duration_us"] - media["duration_us"]) > 100000:
+        return "audio duration mismatch"
+    return None
+
+
+def aac_profile(format_):
+    for key in ("profile", "aac-profile"):
+        if format_.containsKey(key):
+            return int(format_.getInteger(key))
+    if not format_.containsKey("csd-0"):
+        raise ValueError("AAC profile unavailable")
+    config = format_.getByteBuffer("csd-0")
+    if config is None or int(config.limit()) < 2:
+        raise ValueError("AAC configuration unavailable")
+    return (int(config.get(0)) & 255) >> 3
+
+
+def sample_fps(extractor, track_index):
+    extractor.selectTrack(track_index)
+    stamps = []
+    for _ in range(121):
+        stamp = int(extractor.getSampleTime())
+        if stamp < 0:
+            break
+        stamps.append(stamp)
+        if not extractor.advance():
+            break
+    if len(stamps) < 2:
+        raise ValueError("frame timing unavailable")
+    intervals = [right - left for left, right in zip(stamps, stamps[1:])]
+    if min(intervals) <= 0:
+        raise ValueError("use a prepared file without reordered frames")
+    return 1000000.0 / min(intervals)
+
+
+def inspect_media(path):
+    from android.media import MediaExtractor, MediaMetadataRetriever
+
+    if not os.path.isfile(path) or not 0 < os.path.getsize(path) <= 30000000:
+        raise ValueError("missing file or size over 30 MB")
+    with open(path, "rb") as source:
+        if source.read(8)[4:8] != b"ftyp":
+            raise ValueError("expected an MP4 container")
+    extractor = MediaExtractor()
+    retriever = MediaMetadataRetriever()
+    try:
+        extractor.setDataSource(path)
+        retriever.setDataSource(path)
+        tracks = int(extractor.getTrackCount())
+        if tracks != 2:
+            raise ValueError("expected two media tracks")
+        formats = {}
+        indices = {}
+        for index in range(tracks):
+            format_ = extractor.getTrackFormat(index)
+            mime = str(format_.getString("mime"))
+            if mime in formats:
+                raise ValueError("duplicate media track")
+            formats[mime] = format_
+            indices[mime] = index
+        if set(formats) != {"video/avc", "audio/mp4a-latm"}:
+            raise ValueError("expected H264 and AAC")
+        video = formats["video/avc"]
+        audio = formats["audio/mp4a-latm"]
+        return dict(
+            width=int(video.getInteger("width")),
+            height=int(video.getInteger("height")),
+            rotation=int(retriever.extractMetadata(24)),
+            fps=sample_fps(extractor, indices["video/avc"]),
+            duration_us=int(video.getLong("durationUs")),
+            audio_duration_us=int(audio.getLong("durationUs")),
+            size=os.path.getsize(path), video_mime="video/avc",
+            audio_mime="audio/mp4a-latm", tracks=tracks,
+            audio_profile=aac_profile(audio),
+            hdr=video.containsKey("color-transfer")
+            and int(video.getInteger("color-transfer")) in (6, 7),
+        )
+    finally:
+        try:
+            extractor.release()
+        finally:
+            retriever.release()
+
+
+def disable_compression(target, field):
+    original = field.getBoolean(target)
+    try:
+        field.setBoolean(target, False)
+        if field.getBoolean(target):
+            raise RuntimeError("compression flag did not change")
+    except Exception:
+        field.setBoolean(target, original)
+        raise
+
+
+def request_copy(target, fields):
+    end_field = fields["endTime"]
+    original_end = end_field.getLong(target)
+    try:
+        end_field.setLong(target, -1)
+        if end_field.getLong(target) != -1:
+            raise RuntimeError("end time did not change")
+        disable_compression(target, fields["needCompress"])
+    except Exception:
+        end_field.setLong(target, original_end)
+        raise
+
+
+class ConversionHook(MethodHook):
+    def __init__(self, plugin):
+        self.plugin = plugin
+
+    def after_hooked_method(self, param):
+        plugin = self.plugin
+        if not plugin.active:
+            return
+        try:
+            if param.hasThrowable() or len(param.args) != 19:
+                return
+            info = param.args[18]
+            if info is None or not info.isStory:
+                return
+            target = param.getResult()
+            if target is None:
+                return
+            params = {name: read_field(field, target)
+                      for name, field in plugin.fields.items()}
+            path = str(params["videoPath"])
+            if not os.path.basename(path).lower().startswith("storycopy_"):
+                plugin.report("Skipped: use a prepared storycopy_ MP4 file")
+                return
+            media = inspect_media(path)
+            reason = rejection(info, params, media)
+            if reason is not None:
+                plugin.report("Skipped: " + reason)
+                return
+            request_copy(target, plugin.fields)
+            plugin.report("Copy requested: 720x1280, %d fps. Upload result unverified."
+                          % media["fps"])
+        except Exception as error:
+            if isinstance(error, ValueError):
+                plugin.report("Skipped: " + str(error))
+            else:
+                plugin.report("Skipped: unsupported media or app fields (%s)"
+                              % type(error).__name__)
+
+
+class StoryCopyPlugin(BasePlugin):
+    def report(self, message):
+        self.status = message
+        self.log(message)
+
+    def on_plugin_load(self):
+        self.active = False
+        self.unhook = None
+        self.fields = {}
+        self.status = "Not initialized"
+        try:
+            clazz = find_class(
+                "org.telegram.messenger.video.MediaCodecVideoConvertor$ConvertVideoParams")
+            if clazz is None:
+                raise RuntimeError("converter class missing")
+            methods = [method for method in clazz.getDeclaredMethods()
+                       if str(method.getName()) == "of"
+                       and tuple(str(t.getName()) for t in method.getParameterTypes())
+                       == SIGNATURE]
+            if len(methods) != 1:
+                raise RuntimeError("converter signature changed")
+            for name in PARAM_FIELDS:
+                field = clazz.getDeclaredField(name)
+                field.setAccessible(True)
+                self.fields[name] = field
+            methods[0].setAccessible(True)
+            self.unhook = self.hook_method(methods[0], ConversionHook(self))
+            if not self.unhook:
+                raise RuntimeError("hook registration failed")
+            self.active = True
+            self.report("Ready: choose a prepared storycopy_720p file without edits")
+        except Exception as error:
+            self.report("Unavailable: app interface not supported (%s)"
+                        % type(error).__name__)
+
+    def on_plugin_unload(self):
+        self.active = False
+        if self.unhook:
+            self.unhook_method(self.unhook)
+            self.unhook = None
+
+    def create_settings(self):
+        return [
+            Text(text="Last attempt", subtext=getattr(self, "status", "Not initialized")),
+            Text(text="Test files only", subtext="720x1280 H264/AAC MP4, up to 30 MB and "
+                 "60 seconds. Name starts with storycopy_. No story editor changes."),
+            Text(text="Experimental", subtext="Copy requested does not confirm upload "
+                 "quality. Telegram may still process the uploaded file. "
+                 "Reopen settings to refresh the status."),
+        ]
