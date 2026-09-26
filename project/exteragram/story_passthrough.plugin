@@ -9,7 +9,7 @@ __id__ = "story_passthrough"
 __name__ = "Story Copy Test"
 __description__ = "Experimental upload test for prepared 720p story files."
 __author__ = "youpz"
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 __icon__ = "exteraPlugins/1"
 __app_version__ = ">=12.5.1"
 __sdk_version__ = ">=1.4.3.3"
@@ -27,6 +27,7 @@ SIGNATURE = (
     "long", "org.telegram.messenger.MediaController$VideoConvertorListener",
     "org.telegram.messenger.VideoEditedInfo",
 )
+LEGACY_SIGNATURE = SIGNATURE[:2] + SIGNATURE[3:]
 
 
 def read_field(field, target):
@@ -75,7 +76,7 @@ def empty(items):
     return items.isEmpty() if hasattr(items, "isEmpty") else len(items) == 0
 
 
-def rejection(info, params, media):
+def rejection(info, params, media, legacy=False):
     if not info.isStory or not params["isStory"]:
         return "not a story"
     if int(info.wallpaperPeerId) != -9223372036854775808:
@@ -96,9 +97,10 @@ def rejection(info, params, media):
         return "audio volume edited"
     if int(params["bitrate"]) <= 0:
         return "audio copying disabled"
-    for name in ("videoOffset", "rotationValue"):
-        if int(getattr(info, name)) != 0 or int(params[name]) != 0:
-            return "rotation or video offset"
+    offset = getattr(info, "videoOffset", 0) if legacy else info.videoOffset
+    if (int(offset) != 0 or int(params["videoOffset"]) != 0
+            or int(info.rotationValue) != 0 or int(params["rotationValue"]) != 0):
+        return "rotation or video offset"
     for name, expected in (("originalWidth", 720), ("resultWidth", 720),
                            ("originalHeight", 1280), ("resultHeight", 1280)):
         if int(getattr(info, name)) != expected or int(params[name]) != expected:
@@ -261,9 +263,9 @@ class ConversionHook(MethodHook):
         if not plugin.active:
             return
         try:
-            if param.hasThrowable() or len(param.args) != 19:
+            if param.hasThrowable() or len(param.args) != len(plugin.signature):
                 return
-            info = param.args[18]
+            info = param.args[len(plugin.signature) - 1]
             if info is None or not info.isStory:
                 return
             target = param.getResult()
@@ -271,12 +273,15 @@ class ConversionHook(MethodHook):
                 return
             params = {name: read_field(field, target)
                       for name, field in plugin.fields.items()}
+            legacy = plugin.signature == LEGACY_SIGNATURE
+            if legacy:
+                params["videoOffset"] = 0
             path = str(params["videoPath"])
             if not os.path.basename(path).lower().startswith("storycopy_"):
                 plugin.report("Skipped: use a prepared storycopy_ MP4 file")
                 return
             media = inspect_media(path)
-            reason = rejection(info, params, media)
+            reason = rejection(info, params, media, legacy=legacy)
             if reason is not None:
                 plugin.report("Skipped: " + reason)
                 return
@@ -300,6 +305,7 @@ class StoryCopyPlugin(BasePlugin):
         self.active = False
         self.unhook = None
         self.fields = {}
+        self.signature = None
         self.status = "Not initialized"
         stage = "class lookup: " + CONVERTER_CLASS
         discovered = ""
@@ -314,27 +320,30 @@ class StoryCopyPlugin(BasePlugin):
                           if str(method.getName()) == "of"]
             signatures = [tuple(str(t.getName()) for t in method.getParameterTypes())
                           for method in candidates]
-            methods = [method for method, signature in zip(candidates, signatures)
-                       if signature == SIGNATURE]
+            matches = [(method, signature) for method, signature in zip(candidates, signatures)
+                       if signature in (SIGNATURE, LEGACY_SIGNATURE)]
             stage = "signature check"
-            if len(methods) != 1:
+            if len(matches) != 1:
                 summaries = [("of(" + ", ".join(signature) + ")")[:480]
                              for signature in signatures[:3]]
                 discovered = "; Found: " + ("; ".join(summaries) or "no of methods")
                 if len(signatures) > 3:
                     discovered += "; %d more signatures omitted" % (len(signatures) - 3)
-                raise RuntimeError("expected one exact 19-argument signature, found %d matches"
-                                   % len(methods))
+                raise RuntimeError("expected one supported 18/19-argument signature, found %d matches"
+                                   % len(matches))
+            method, self.signature = matches[0]
             for name in PARAM_FIELDS:
+                if name == "videoOffset" and self.signature == LEGACY_SIGNATURE:
+                    continue
                 stage = "field lookup: " + name
                 field = clazz.getDeclaredField(name)
                 stage = "field access: " + name
                 field.setAccessible(True)
                 self.fields[name] = field
             stage = "method access"
-            methods[0].setAccessible(True)
+            method.setAccessible(True)
             stage = "hook registration"
-            self.unhook = self.hook_method(methods[0], ConversionHook(self))
+            self.unhook = self.hook_method(method, ConversionHook(self))
             if not self.unhook:
                 raise RuntimeError("hook registration failed")
             self.active = True
@@ -348,8 +357,44 @@ class StoryCopyPlugin(BasePlugin):
             self.unhook_method(self.unhook)
             self.unhook = None
 
+    def show_diagnostics(self, view):
+        try:
+            from client_utils import get_last_fragment
+            from ui.alert import AlertDialogBuilder
+
+            fragment = get_last_fragment()
+            if fragment is None:
+                self.log("Diagnostics: no active screen")
+                return
+            activity = fragment.getParentActivity()
+            if activity is None:
+                self.log("Diagnostics: no active window")
+                return
+            message = "Story Copy Test " + __version__ + "\n\n" + getattr(
+                self, "status", "Not initialized")
+            builder = AlertDialogBuilder(activity)
+            builder.set_title("Diagnostics")
+            builder.set_message(message)
+
+            def copy(dialog, which):
+                try:
+                    from android_utils import copy_to_clipboard
+
+                    copy_to_clipboard(message)
+                    dialog.dismiss()
+                except Exception as error:
+                    self.log("Diagnostics copy failed: " + load_error(error))
+
+            builder.set_positive_button("Copy", copy)
+            builder.set_negative_button("Close", lambda dialog, which: dialog.dismiss())
+            builder.show()
+        except Exception as error:
+            self.log("Diagnostics unavailable: " + load_error(error))
+
     def create_settings(self):
         return [
+            Text(text="Diagnostics", subtext="Open full status and copy it",
+                 on_click=self.show_diagnostics),
             Text(text="Last attempt", subtext=getattr(self, "status", "Not initialized")),
             Text(text="Test files only", subtext="720x1280 H264/AAC MP4, up to 30 MB and "
                  "60 seconds. Name starts with storycopy_. No story editor changes."),

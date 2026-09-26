@@ -182,7 +182,8 @@ class StoryPassthroughTests(unittest.TestCase):
                 getType=lambda: types.SimpleNamespace(getName=lambda: "object"),
                 get=lambda obj, key=name: getattr(obj, key))
         messages = []
-        plugin = types.SimpleNamespace(active=True, fields=fields, report=messages.append)
+        plugin = types.SimpleNamespace(active=True, fields=fields, report=messages.append,
+                                       signature=self.plugin.SIGNATURE)
         param = types.SimpleNamespace(
             args=[None] * 18 + [self.info], hasThrowable=lambda: False,
             getResult=lambda: target)
@@ -193,7 +194,7 @@ class StoryPassthroughTests(unittest.TestCase):
 
     def test_non_story_never_inspects_file(self):
         self.info.isStory = False
-        plugin = types.SimpleNamespace(active=True)
+        plugin = types.SimpleNamespace(active=True, signature=self.plugin.SIGNATURE)
         param = types.SimpleNamespace(
             args=[None] * 18 + [self.info], hasThrowable=lambda: False)
         with patch.object(self.plugin, "inspect_media") as inspect:
@@ -206,12 +207,20 @@ class StoryPassthroughTests(unittest.TestCase):
     def test_java_class_wrapper_loads_and_applies_copy(self):
         self.successful_hook_and_unload(True)
 
-    def successful_hook_and_unload(self, wrapped):
+    def test_legacy_18_argument_hook_applies_copy(self):
+        self.successful_hook_and_unload(True, legacy=True)
+
+    def successful_hook_and_unload(self, wrapped, legacy=False):
+        signature = self.plugin.SIGNATURE
+        if legacy:
+            signature = signature[:2] + signature[3:]
+            del self.info.videoOffset
+            del self.params["videoOffset"]
         fields = self.java_fields()
         method = types.SimpleNamespace(
             getName=lambda: "of", setAccessible=lambda value: None,
             getParameterTypes=lambda: [types.SimpleNamespace(getName=lambda n=n: n)
-                                       for n in self.plugin.SIGNATURE])
+                                       for n in signature])
         clazz = types.SimpleNamespace(getDeclaredMethods=lambda: [method],
                                       getDeclaredField=lambda name: fields[name],
                                       getName=lambda: "org.telegram.messenger.video."
@@ -236,7 +245,7 @@ class StoryPassthroughTests(unittest.TestCase):
         self.assertTrue(plugin.status.startswith("Ready:"))
         target = types.SimpleNamespace(**self.params)
         param = types.SimpleNamespace(
-            args=[None] * 18 + [self.info], hasThrowable=lambda: False,
+            args=[None] * (len(signature) - 1) + [self.info], hasThrowable=lambda: False,
             getResult=lambda: target)
         with patch.object(self.plugin, "inspect_media", return_value=self.media):
             installed[0].after_hooked_method(param)
@@ -244,10 +253,74 @@ class StoryPassthroughTests(unittest.TestCase):
         self.assertEqual(target.endTime, -1)
         self.assertEqual(self.info.endTime, 34530000)
         self.assertTrue(plugin.status.startswith("Copy requested:"))
+        if legacy:
+            self.assertFalse(hasattr(target, "videoOffset"))
+            self.info.videoOffset = 100
+            target.needCompress = True
+            target.endTime = self.params["endTime"]
+            with patch.object(self.plugin, "inspect_media", return_value=self.media):
+                installed[0].after_hooked_method(param)
+            self.assertTrue(target.needCompress)
+            self.assertEqual(target.endTime, self.params["endTime"])
+            self.assertTrue(plugin.status.startswith("Skipped:"))
         plugin.on_plugin_unload()
         self.assertFalse(plugin.active)
         self.assertEqual(removed, [token])
         installed[0].after_hooked_method(None)
+
+    def test_current_contract_requires_video_offset_field(self):
+        signature = self.plugin.SIGNATURE
+        method = types.SimpleNamespace(
+            getName=lambda: "of",
+            getParameterTypes=lambda: [types.SimpleNamespace(getName=lambda n=n: n)
+                                       for n in signature])
+        fields = self.java_fields()
+        del fields["videoOffset"]
+        clazz = types.SimpleNamespace(getDeclaredMethods=lambda: [method],
+                                      getDeclaredField=lambda name: fields[name])
+        plugin = self.plugin.StoryCopyPlugin()
+        plugin.log = lambda message: None
+        plugin.hook_method = lambda *args: self.fail("current offset field required")
+        with patch.object(self.plugin, "find_class", return_value=clazz):
+            plugin.on_plugin_load()
+        self.assertFalse(plugin.active)
+        self.assertIn("field lookup: videoOffset", plugin.status)
+
+    def test_current_contract_requires_info_video_offset(self):
+        del self.info.videoOffset
+        with self.assertRaises(AttributeError):
+            self.reason()
+
+    def test_unknown_18_argument_types_are_rejected(self):
+        signature = list(self.plugin.SIGNATURE[:2] + self.plugin.SIGNATURE[3:])
+        signature[2] = "long"
+        method = types.SimpleNamespace(
+            getName=lambda: "of", getParameterTypes=lambda: [types.SimpleNamespace(
+                getName=lambda n=n: n) for n in signature])
+        clazz = types.SimpleNamespace(getDeclaredMethods=lambda: [method])
+        plugin = self.plugin.StoryCopyPlugin()
+        plugin.log = lambda message: None
+        plugin.hook_method = lambda *args: self.fail("unknown signature")
+        with patch.object(self.plugin, "find_class", return_value=clazz):
+            plugin.on_plugin_load()
+        self.assertFalse(plugin.active)
+        self.assertIn("signature check", plugin.status)
+
+    def test_two_supported_factory_overloads_are_rejected(self):
+        signatures = [self.plugin.SIGNATURE,
+                      self.plugin.SIGNATURE[:2] + self.plugin.SIGNATURE[3:]]
+        methods = [types.SimpleNamespace(
+            getName=lambda: "of", getParameterTypes=lambda signature=signature: [
+                types.SimpleNamespace(getName=lambda n=n: n) for n in signature])
+            for signature in signatures]
+        clazz = types.SimpleNamespace(getDeclaredMethods=lambda: methods)
+        plugin = self.plugin.StoryCopyPlugin()
+        plugin.log = lambda message: None
+        plugin.hook_method = lambda *args: self.fail("ambiguous factories")
+        with patch.object(self.plugin, "find_class", return_value=clazz):
+            plugin.on_plugin_load()
+        self.assertFalse(plugin.active)
+        self.assertIn("signature check", plugin.status)
 
     def test_wrapper_cannot_redirect_to_another_class(self):
         for name in ("java.lang.Class", "org.example.OtherConverter"):
@@ -381,6 +454,54 @@ class StoryPassthroughTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     self.plugin.inspect_media(str(path))
         self.assertEqual(released, ["extractor", "retriever"])
+
+    def test_diagnostics_opens_full_status_and_copies_exact_dialog_text(self):
+        plugin = self.plugin.StoryCopyPlugin()
+        plugin.status = "Unavailable: signature check; Found: of(" + "long, " * 100 + ")"
+        plugin.log = lambda message: None
+        actions = {}
+        activity = object()
+        copied = []
+        builder = types.SimpleNamespace(
+            set_title=lambda title: actions.update(title=title),
+            set_message=lambda text: actions.update(message=text),
+            set_positive_button=lambda text, callback: actions.update(copy=callback),
+            set_negative_button=lambda text, callback: actions.update(close=callback),
+            show=lambda: actions.update(shown=True),
+            dismiss=lambda: actions.update(dismissed=True),
+        )
+        alert = types.ModuleType("ui.alert")
+        alert.AlertDialogBuilder = lambda context: (
+            self.assertIs(context, activity) or builder)
+        client = types.ModuleType("client_utils")
+        client.get_last_fragment = lambda: types.SimpleNamespace(
+            getParentActivity=lambda: activity)
+        android = types.ModuleType("android_utils")
+        android.copy_to_clipboard = copied.append
+        row = next(row for row in plugin.create_settings() if row["text"] == "Diagnostics")
+        with patch.dict(sys.modules, {"ui.alert": alert, "client_utils": client,
+                                     "android_utils": android}):
+            row["on_click"](object())
+            self.assertTrue(actions["shown"])
+            self.assertIn(plugin.status, actions["message"])
+            self.assertEqual(copied, [])
+            plugin.status = "new status after opening"
+            actions["copy"](builder, -1)
+            self.assertEqual(copied, [actions["message"]])
+            self.assertTrue(actions["dismissed"])
+
+    def test_diagnostics_without_activity_preserves_status(self):
+        for fragment in (None, types.SimpleNamespace(getParentActivity=lambda: None)):
+            plugin = self.plugin.StoryCopyPlugin()
+            plugin.status = "Unavailable: original diagnostic"
+            plugin.log = lambda message: None
+            client = types.ModuleType("client_utils")
+            client.get_last_fragment = lambda: fragment
+            alert = types.ModuleType("ui.alert")
+            alert.AlertDialogBuilder = lambda context: self.fail("no dialog without activity")
+            with patch.dict(sys.modules, {"client_utils": client, "ui.alert": alert}):
+                plugin.show_diagnostics(None)
+            self.assertEqual(plugin.status, "Unavailable: original diagnostic")
 
     def test_only_compression_flag_changes(self):
         target = types.SimpleNamespace(**self.params)
