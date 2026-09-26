@@ -186,7 +186,7 @@ needed: `TT_MODE`, `TT_S_CRF`, `TT_M_CRF`, `TT_S_MAXRATE`, `TT_BRAND`, `TT_SEI`,
 
 ## Running it
 
-Double-click `start.bat` (or run `python app.py`) and the page opens at
+Double-click `start.bat` (or run `py -3 app.py`) and the page opens at
 `http://127.0.0.1:8765`. **Drop a video, pick a mode, hit start.**
 
 If the port is taken by another process, the server picks the next free one and
