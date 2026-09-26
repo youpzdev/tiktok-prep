@@ -1,237 +1,149 @@
-[Русский](README.md) · **English**
+[Русский](README.md) | **English**
 
 # TikTok Prep Tool
 
-Local video prep for TikTok: compression plus MP4 container masking.
-Quality survives, and the file does not look processed.
+Local video preparation for TikTok: ffmpeg encoding and MP4 container editing.
+Python standard library, no cloud, no telemetry.
 
-Python stdlib + ffmpeg · no cloud, no telemetry
+**by youpzdev** - [Telegram](https://t.me/youpzlabnsfw) | [TikTok](https://www.tiktok.com/@youpzdev)
 
-**by youpzdev** - [Telegram](https://t.me/youpzlabnsfw) · [TikTok](https://www.tiktok.com/@youpzdev)
+The software is free. Terms of use: [non-commercial license](LICENSE).
 
-> [!IMPORTANT]
-> **This software is free. If anyone charges you for it, they're ripping you off.**
+## What has been verified
 
----
+The new Stealth mode follows the observed parameters of a file that, according
+to the user, retained high quality after processing with another tool and
+publishing. Local checks cover container structure, video decoding and preservation
+of real audio samples during patching. Publishing an output from this version
+has not been tested yet.
 
-## The problem
-
-I run a TikTok account and post edits on a specific topic. And I ran into the
-dumbest possible problem: **TikTok destroys quality**. Not compresses, destroys.
-A 4K/60fps source came out as 720p/30fps at best.
-
-## Looking for a fix
-
-### Attempt 1: upload through TikTok Studio
-
-The first and dumbest idea. A couple of tries later it was clear nothing's changing.
-The nasty part: a video uploaded from your device stays **in your cache**, so it
-looks sharp to you and mangled to everyone else.
-
-I also looked at ready-made tools. Some paid, some free but sketchy: upload your
-video to a random site, get no explanation, and receive a patched file back with
-the size cut down by compression.
-
-### Attempt 2: my own converter
-
-I wrote a converter that lowered the bitrate, changed the codec and downscaled to
-Full HD: **86 MB to 15 MB**. The bitrate changed too. Surprisingly **it didn't
-help**, the published video still looked awful.
-
-### Attempt 3: frame count inflation
-
-Digging through the metadata of patched videos, I noticed a pattern: the source
-had 1073 frames, while the file claimed ten times more. I rebuilt the tool around
-that scheme, and quality-wise it worked.
-
-Then a different problem showed up: **TikTok started hiding those videos**. The
-file is valid, it plays, it uploads, and it gets no reach. An inflated frame count
-produces something a normal export never has: the declared track duration doesn't
-match the actual content. On top of that, ffmpeg signs its own work.
-
-### Attempt 4: masking as a native export
-
-I took the MediaInfo of a real video that performed fine and compared it with my
-output field by field. The difference was in the signatures, not in the picture:
-
-| | Native export | My output (before) |
-|---|---|---|
-| Encoded_Library | `EditingVC1-v1.5.0.2` | `x264 - core 164 ... options: cabac=1 ref=4 crf=...` |
-| Encoded_Application | editor JSON | `Lavf61.7.100` |
-| Tags | Performer only | `Patched by method.youpzdev - <id>` |
-| Frame count | matches duration | inflated tenfold |
-
-The file was literally signed with the word Patched and the full encoder settings
-string. Those fields are cleaned now.
-
-An important caveat: the reference is a file **downloaded from TikTok**, meaning
-it already went through their transcoder (`te_is_reencode: 1` in its metadata is
-their own marker). Matching it means "we look like their output", not "we will be
-accepted without re-compression". Those are two different properties.
-
-### Attempt 5: separating the two levers
-
-Frame inflation and the giveaway signatures always shipped together, so there was
-no way to tell which one caused the hiding. They are separate now: signatures are
-always cleaned, and inflation is a toggle. The combination "inflation plus clean
-signatures" had never been tested.
-
-## Why it works (a guess)
-
-I don't know the real reason and I'm not going to pretend I do, this isn't my
-stack. My guess: reading metadata is cheaper for the platform than analysing the
-picture. An x264 settings string in SEI, `Lavf` in the `©too` tag and a frame
-count that does not add up are markers a regular user never produces. With those
-gone, the file passes as an ordinary editor export.
-
-## What the tool does
-
-**Step 1, compression.** Downscale to fit without upscaling, x264 high, BT.709 in
-the container, AAC 48 kHz audio. Incoming metadata is dropped entirely.
-
-**Step 2, container masking** ([mp4mask.py](mp4mask.py)), editing boxes and the
-bitstream without re-encoding:
-
-1. **Encoder SEI.** The stream carries a `user_data_unregistered` payload with the
-   full x264 settings string. It is overwritten with `filler_payload` of the same
-   length: a native export has no `user_data_unregistered` at all, so the
-   signature is removed rather than replaced. NAL length is preserved, so the
-   `stsz` and `stco` tables stay valid.
-2. **compressorname.** The encoder name goes into the 32-byte field in `stsd`.
-   That is where MediaInfo reads `Encoded_Library` from, not from SEI.
-3. **The `©too` tag.** ffmpeg always writes `Lavf<version>` there and ignores
-   `-metadata encoder=`, so the tag is rewritten afterwards.
-4. **File structure.** The empty `free` box ffmpeg leaves after faststart is
-   dropped, and a block the size of `moov` is appended to the tail: that is the
-   box order a native export has. Chunk offsets in every track are recalculated
-   from the actual `mdat` shift.
-
-Decoded frames after masking are bit-for-bit identical to the original, verified
-by comparing the MD5 of every frame before and after.
-
-## Removing the btrt box
-
-Without this the rest does nothing. ffmpeg writes a `btrt` box into
-every track's `stsd`, declaring buffer size, maximum and average bitrate as plain
-numbers. While it is there, an estimator has no reason to compute anything from
-duration - it reads the real 16 Mbps straight from the container. The working
-patcher removes this box, and so do we now.
-
-## Ghost audio track
-
-Reverse-engineered from a working patcher's output (2026-08-29). A third track is
-added to `moov`: a copy of the audio whose sample count is ten times higher - 809
-real samples plus 7281 dummy ones, each one tick long. The dummy samples sit in a
-single chunk in the file tail at 8 bytes each, 58 KB for the whole clip.
-
-The trick is that an estimator computes audio duration as sample count times 1024
-divided by the sample rate. For the clone that yields 172 seconds instead of 17,
-and the observed bitrate drops tenfold. Meanwhile:
-
-- the video track is untouched, `fps` stays honest (no 600 FPS);
-- the clone's real duration grows by only 0.15 s, because the dummy samples have a
-  delta of one tick rather than 1024;
-- players use the first audio track and never trip over the clone, and the file
-  decodes without a single error.
-
-That is exactly what separates this from frame count inflation, which TikTok
-catches.
-
-## Frame count inflation (do not use)
-
-A separate toggle in the UI. Dummy samples are appended to the video track's
-`stsz`, `stts`, `stsc` and `stco` tables: the container starts claiming ten times
-more frames, `stts` reports 172 seconds instead of 17, and the observed bitrate
-drops from 16.2 to 1.63 Mbps. `mvhd` and `mdhd` stay honest, real samples and
-`mdat` are untouched, and the dummy chunks point past the end of the file.
-
-The trick is that an estimator computing bitrate as size over duration sees a long
-and thin video and doesn't bother re-compressing it.
-
-**This doesn't work any more. Leave it off.** Verified 2026-08-29 on a clean file
-with no giveaway signatures at all: TikTok recognises such a container and forces
-the video to "only me" privacy. That also answers the old question of what got
-the videos hidden before - it was the inflation, not the tags. The toggle is kept
-for experiments only.
-
-## Modes
-
-| | Stealth | Max |
-|---|---|---|
-| Resolution | up to 1080x1920 | up to 3840x2160 |
-| Frame rate | up to 60 | uncapped |
-| Bits per pixel | 0.207 | 0.26 |
-| H.264 level | 4.2 | encoder picks |
-
-Bitrate is driven by bits per pixel rather than CRF: CRF 16 produced about
-7.8 Mbps at 1080p60 against 16.1 in the reference, half the picture. The
-reference holds roughly 0.207 bits per pixel, so the bitrate is derived from the
-actual resolution and frame rate and scales with them.
-
-**Stealth** matches the parameters of a native export. The 1080 and 60 fps caps
-are not arbitrary: no mobile editor outputs 4K or 120+ fps, so such a file gives
-the processing away by itself.
-
-**Max** is for when quality matters more than blending in. If the stream is
-already H.264 8-bit and fits the limits, it is **copied without re-encoding**: the
-picture stays bit-for-bit identical and the job takes a fraction of a second.
-Re-encoding kicks in only when the video has to be downscaled or converted from
-another format. The reason is simple: re-encoding finished H.264 is a second
-generation of loss on top of what TikTok adds on upload. Metadata masking still
-applies, but a file like this can't pass as a native export.
-
-Every parameter can be overridden with environment variables, no code edits
-needed: `TT_MODE`, `TT_S_CRF`, `TT_M_CRF`, `TT_S_MAXRATE`, `TT_BRAND`, `TT_SEI`,
-`TT_PORT` and the rest of the `PROFILES` block in `app.py`.
+TikTok decides how to process uploaded video. Matching the reference metadata
+does not guarantee resolution, frame rate or reach. Some settings of the other
+encoder remain unknown; this tool does not claim to reproduce its entire output
+byte for byte.
 
 ## Running it
 
-Double-click `start.bat` (or run `py -3 app.py`) and the page opens at
-`http://127.0.0.1:8765`. **Drop a video, pick a mode, click "Process videos".**
+Python 3 and ffmpeg are required. No Python packages need to be installed.
 
-If the port is taken by another process, the server picks the next free one and
-says so in the console. An already running instance is reused instead of starting
-a second one.
-
-**ffmpeg** is required, once:
+To install ffmpeg on Windows:
 
 ```
 winget install Gyan.FFmpeg
 ```
 
-The app finds ffmpeg in winget, PATH or a local `bin/` folder on its own. There
-are no Python dependencies at all, only the standard library.
+The app looks for ffmpeg and ffprobe in PATH, the winget installation and a
+`bin/` folder next to the app.
+
+Open `start.bat` or run `py -3 app.py`. A browser opens at
+`http://127.0.0.1:8765`. Add files or a folder, choose a mode and click
+"Process videos". You can also drop files into the browser window.
+
+If another app occupies the port, the server picks the next free one.
+Launching again reuses the running instance.
+
+## Modes
+
+Default settings:
+
+| Parameter | Stealth | Max |
+|---|---|---|
+| Dimensions | short side up to 1080, long side up to 1920 | short side up to 2160, long side up to 3840 |
+| Frame rate | no higher than source or 60, may be fractional | no profile cap |
+| Video | always H.264 Main L5.2 | copies suitable 8-bit H.264; otherwise H.264 High |
+| Bitrate | based on input file size and duration | 0.26 bits per pixel when encoding |
+| Audio when encoding | AAC LC, 48 kHz, stereo, 200 kbit/s | AAC LC, 48 kHz, stereo, 320 kbit/s |
+
+Video is not upscaled. Missing audio is not created.
+
+### Stealth
+
+Frame rate is calculated by dividing video frame count by the format duration
+reported by ffprobe, then capped at the source rate and the profile limit. If
+the calculated reduction exceeds 5%, or the required data is unavailable, the
+source rate is used with the same cap. The output may therefore be 59.357677 FPS
+instead of 60. Video timestamps are stretched slightly for the fractional rate.
+
+Target video bitrate is `input file size * 8 / mvhd duration`, rounded down to
+kbit/s. If `mvhd` duration is unknown, ffprobe duration is used. When usable
+input data is unavailable, a fallback calculation uses 0.232 bits per pixel.
+By default, `maxrate` is twice the target and `bufsize` is three times the target.
+These are encoder settings; the actual encoded bitrate may differ.
+
+Encoding uses Main L5.2, the x264 refs=1 setting and up to three B-frames. The maximum
+keyframe interval is about two seconds; scene changes can add earlier keyframes.
+The x264 settings SEI is replaced with `evc0 v1.4.2.2-20260920` at keyframes.
+The `compressorname` field contains `Lavc libx264`, and `btrt` boxes are retained.
+The `©too` tag receives compact JSON with `libevc=0`, `trans_type=-2`, target
+bitrate and maximum bitrate.
+
+With the dummy audio samples option enabled:
+
+- There is still one audio track. Nine dummy samples are added per real AAC
+  sample, making the total sample count ten times higher.
+- Each dummy sample is eight bytes, `0000000400000000`, with a one-tick duration.
+  All dummy samples occupy one chunk after the MP4 boxes, outside `mdat`.
+- `mdhd` and `tkhd` retain their real durations while the `stts` sum includes
+  the dummy tail. Both tracks lose `edts`; version 1 `mvhd` is assigned an
+  unknown duration.
+- The empty `free` box before `mdat` is removed and chunk offsets are recalculated.
+  Real video and audio bytes do not change during this step.
+
+The dummy tail is not valid AAC audio and causes decoding errors. It is part of
+an experimental container, so a clean video decode must not be presented as a
+clean decode of the entire audio track. Real samples are checked separately.
+
+When the option is off, or the source has no audio, no dummy tail is added,
+durations stay ordinary and edit lists are retained. The selected Stealth
+encoding profile and its metadata still apply.
+
+### Max
+
+Max retains its previous processing. Suitable 8-bit H.264 is copied without
+re-encoding the image. A different size or format triggers encoding; a failed
+stream copy also falls back to encoding.
+
+Legacy masking removes x264 SEI and `btrt`, and changes `compressorname` and
+`©too`. When dummy audio is enabled, it adds a separate inflated clone of the
+audio track. These operations describe Max, not the new Stealth mode.
+
+## Settings
+
+Set environment variables before launching. The full set is in `app.py`.
+
+| Variable | Purpose |
+|---|---|
+| `TT_MODE` | default mode: `stealth` or `max` |
+| `TT_PORT` | starting port, 8765 by default |
+| `TT_S_SHORT`, `TT_S_LONG`, `TT_S_FPS` | Stealth limits |
+| `TT_S_MAXRATE`, `TT_S_BUFSIZE` | explicit rate limits instead of the 2x and 3x defaults |
+| `TT_S_PRESET`, `TT_S_REFS`, `TT_S_LEVEL`, `TT_S_X264`, `TT_S_ABR` | Stealth encoder settings |
+| `TT_M_REENCODE` | Max behavior, `auto` by default |
+| `TT_M_BPP`, `TT_M_CRF`, `TT_M_MAXRATE`, `TT_M_BUFSIZE` | Max encoding settings |
+| `TT_GHOST` | default dummy sample multiplier, 10 |
+| `TT_BRAND` | artist tag value |
+| `TT_SEI`, `TT_MASK_MAXRATE` | legacy Max masking metadata |
 
 ## Output
 
-Files land next to the source in a `tiktok_ready/` subfolder as
-`<name>_tiktok.mp4`. Files dropped into the browser are copied to `incoming/`,
-with results in `incoming/tiktok_ready/`.
+Results are saved next to the source in `tiktok_ready/`, named
+`<name>_tiktok.mp4`. Files sent through the browser are first copied to
+`incoming/`, with results in `incoming/tiktok_ready/`.
 
-All processing is **local**: nothing is uploaded anywhere, no telemetry, no
-external servers.
+Processing runs on your computer. The app does not publish video, send it to
+external services or collect telemetry.
 
----
+## Why the algorithm changed
 
-> It's armour versus shell. The trick works today, but TikTok keeps tuning its
-> algorithms, and nobody's promising it'll last.
+An August 2026 test of the old method produced a successful 1080p60 publication,
+but in September the user reported 480p30. A comparison with a newer successful
+reference found Main L5.2, retained `btrt`, SEI and one inflated audio track
+instead of a clone. That comparison does not support the old claim that every
+successful file must have all SEI and `btrt` removed.
 
-## Keywords and tags
-
-TikTok Prep Tool is a free local video optimizer for preparing and uploading
-clips to TikTok without losing quality. Handles MP4, 4K, Full HD and vertical
-video, edits, clips, Shorts and Reels through FFmpeg.
-
-`TikTok` · `Tik Tok` · `TikTok video optimizer` · `TikTok quality` ·
-`TikTok upload quality` · `TikTok video quality` · `keep video quality` ·
-`TikTok 4K` · `TikTok 60 FPS` · `TikTok Full HD` · `1080p TikTok` ·
-`vertical video` · `video prep for TikTok` · `video optimization` ·
-`video compression` · `lossless-looking compression` · `video compressor` ·
-`video transcoder` · `MP4 optimizer` · `MP4 metadata` · `FFmpeg` ·
-`Python video tool` · `local video processing` · `no cloud` · `TikTok edits` ·
-`TikTok clips` · `TikTok content creator` · `TikTok uploader` ·
-`TikTok compression fix` · `TikTok quality fix` · `TikTok duplicate content` ·
-`unique video` · `video fingerprint` · `YouTube Shorts` · `Instagram Reels`
+The cause of the publication quality difference remains unknown. Current Stealth
+reproduces the observed combination for the next publication test. Task details
+and findings are in [project state](docs/project-state.md).
 
 ## License
 
