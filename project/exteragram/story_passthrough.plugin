@@ -1,4 +1,5 @@
 import os
+import re
 
 from base_plugin import BasePlugin, MethodHook
 from hook_utils import find_class
@@ -8,7 +9,7 @@ __id__ = "story_passthrough"
 __name__ = "Story Copy Test"
 __description__ = "Experimental upload test for prepared 720p story files."
 __author__ = "youpz"
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __icon__ = "exteraPlugins/1"
 __app_version__ = ">=12.5.1"
 __sdk_version__ = ">=1.4.3.3"
@@ -38,6 +39,15 @@ def read_field(field, target):
     if kind == "float":
         return field.getFloat(target)
     return field.get(target)
+
+
+def load_error(error):
+    message = " ".join(str(error).split())
+    message = re.sub(r"(?:[A-Za-z]:[\\/]|/)[^,;]*", "[path]", message)
+    message = "".join(char if 32 <= ord(char) < 127 else "?" for char in message)
+    if len(message) > 240:
+        message = message[:237] + "..."
+    return type(error).__name__ + (": " + message if message else "")
 
 
 def empty(items):
@@ -272,30 +282,45 @@ class StoryCopyPlugin(BasePlugin):
         self.unhook = None
         self.fields = {}
         self.status = "Not initialized"
+        stage = "class lookup: org.telegram.messenger.video.MediaCodecVideoConvertor$ConvertVideoParams"
+        discovered = ""
         try:
             clazz = find_class(
                 "org.telegram.messenger.video.MediaCodecVideoConvertor$ConvertVideoParams")
             if clazz is None:
                 raise RuntimeError("converter class missing")
-            methods = [method for method in clazz.getDeclaredMethods()
-                       if str(method.getName()) == "of"
-                       and tuple(str(t.getName()) for t in method.getParameterTypes())
-                       == SIGNATURE]
+            stage = "method discovery"
+            candidates = [method for method in clazz.getDeclaredMethods()
+                          if str(method.getName()) == "of"]
+            signatures = [tuple(str(t.getName()) for t in method.getParameterTypes())
+                          for method in candidates]
+            methods = [method for method, signature in zip(candidates, signatures)
+                       if signature == SIGNATURE]
+            stage = "signature check"
             if len(methods) != 1:
-                raise RuntimeError("converter signature changed")
+                summaries = [("of(" + ", ".join(signature) + ")")[:480]
+                             for signature in signatures[:3]]
+                discovered = "; Found: " + ("; ".join(summaries) or "no of methods")
+                if len(signatures) > 3:
+                    discovered += "; %d more signatures omitted" % (len(signatures) - 3)
+                raise RuntimeError("expected one exact 19-argument signature, found %d matches"
+                                   % len(methods))
             for name in PARAM_FIELDS:
+                stage = "field lookup: " + name
                 field = clazz.getDeclaredField(name)
+                stage = "field access: " + name
                 field.setAccessible(True)
                 self.fields[name] = field
+            stage = "method access"
             methods[0].setAccessible(True)
+            stage = "hook registration"
             self.unhook = self.hook_method(methods[0], ConversionHook(self))
             if not self.unhook:
                 raise RuntimeError("hook registration failed")
             self.active = True
             self.report("Ready: choose a prepared storycopy_720p file without edits")
         except Exception as error:
-            self.report("Unavailable: app interface not supported (%s)"
-                        % type(error).__name__)
+            self.report("Unavailable: " + stage + "; " + load_error(error) + discovered)
 
     def on_plugin_unload(self):
         self.active = False

@@ -254,6 +254,50 @@ class StoryPassthroughTests(unittest.TestCase):
             plugin.on_plugin_load()
         self.assertFalse(plugin.active)
         self.assertFalse(registered)
+        self.assertIn("class lookup", plugin.status)
+        self.assertIn("MediaCodecVideoConvertor$ConvertVideoParams", plugin.status)
+
+    def test_signature_mismatch_lists_discovered_signature(self):
+        method = types.SimpleNamespace(
+            getName=lambda: "of",
+            getParameterTypes=lambda: [types.SimpleNamespace(
+                getName=lambda: "org.telegram.messenger.VideoEditedInfo")])
+        clazz = types.SimpleNamespace(getDeclaredMethods=lambda: [method])
+        plugin = self.plugin.StoryCopyPlugin()
+        plugin.log = lambda message: None
+        with patch.object(self.plugin, "find_class", return_value=clazz):
+            plugin.on_plugin_load()
+        self.assertFalse(plugin.active)
+        self.assertIn("signature check", plugin.status)
+        self.assertIn("of(org.telegram.messenger.VideoEditedInfo)", plugin.status)
+
+    def test_load_error_bounds_message_and_redacts_paths(self):
+        plugin = self.plugin.StoryCopyPlugin()
+        plugin.log = lambda message: None
+        error = RuntimeError("Access denied /storage/emulated/0/private.mp4 "
+                             "C:\\Users\\name\\private.mp4 " + "x" * 1000)
+        with patch.object(self.plugin, "find_class", side_effect=error):
+            plugin.on_plugin_load()
+        self.assertIn("Access denied", plugin.status)
+        self.assertNotIn("private.mp4", plugin.status)
+        self.assertNotIn("/storage", plugin.status)
+        self.assertLess(len(plugin.status), 500)
+        error = RuntimeError("Failure: " + "x" * 1000)
+        self.assertLessEqual(len(self.plugin.load_error(error)), 254)
+        error = RuntimeError("Permission: C:\\Users\\user name\\private file.mp4")
+        self.assertNotIn("private", self.plugin.load_error(error))
+
+    def test_signature_diagnostic_is_bounded(self):
+        method = types.SimpleNamespace(
+            getName=lambda: "of", getParameterTypes=lambda: [types.SimpleNamespace(
+                getName=lambda: "org.example." + "LongType" * 100)])
+        clazz = types.SimpleNamespace(getDeclaredMethods=lambda: [method] * 10)
+        plugin = self.plugin.StoryCopyPlugin()
+        plugin.log = lambda message: None
+        with patch.object(self.plugin, "find_class", return_value=clazz):
+            plugin.on_plugin_load()
+        self.assertIn("7 more signatures omitted", plugin.status)
+        self.assertLess(len(plugin.status), 1800)
 
     def test_missing_required_field_does_not_register_hook(self):
         method = types.SimpleNamespace(
@@ -272,6 +316,9 @@ class StoryPassthroughTests(unittest.TestCase):
             plugin.on_plugin_load()
         self.assertFalse(plugin.active)
         self.assertFalse(registered)
+
+        self.assertIn("field lookup: endTime", plugin.status)
+        self.assertIn("KeyError", plugin.status)
 
     def test_media_resources_released_when_open_fails(self):
         released = []
