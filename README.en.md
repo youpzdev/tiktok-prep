@@ -187,7 +187,7 @@ needed: `TT_MODE`, `TT_S_CRF`, `TT_M_CRF`, `TT_S_MAXRATE`, `TT_BRAND`, `TT_SEI`,
 ## Running it
 
 Double-click `start.bat` (or run `py -3 app.py`) and the page opens at
-`http://127.0.0.1:8765`. **Drop a video, pick a mode, hit start.**
+`http://127.0.0.1:8765`. **Drop a video, pick a mode, click "Process videos".**
 
 If the port is taken by another process, the server picks the next free one and
 says so in the console. An already running instance is reused instead of starting

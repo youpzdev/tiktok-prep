@@ -25,37 +25,37 @@ const state = {
 
 const I18N = {
   ru: {
-    brand_sub: "компрессия и маскировка контейнера",
-    modes_title: "режим",
-    queue_title: "очередь",
-    btn_files: "файлы",
-    btn_folder: "папка",
-    btn_clear: "очистить",
-    btn_cancel: "отменить",
-    btn_start: "старт",
-    btn_open: "открыть папку",
-    empty_title: "перетащи видео в окно",
-    empty_hint: "mp4, mov, mkv, webm и другие. на выходе mp4 в папке tiktok_ready рядом с исходником",
-    drop_now: "отпускай",
-    engine_check: "проверка движка",
-    engine_notfound: "ffmpeg не найден",
-    engine_offline: "сервер офлайн",
+    brand_sub: "Подготовка видео",
+    modes_title: "Обработка",
+    queue_title: "Очередь",
+    btn_files: "Добавить файлы",
+    btn_folder: "Папка",
+    btn_clear: "Очистить",
+    btn_cancel: "Отменить",
+    btn_start: "Обработать видео",
+    btn_open: "Открыть папку",
+    empty_title: "Перетащи видео сюда",
+    empty_hint: "MP4, MOV, MKV, WEBM и другие",
+    drop_now: "Отпусти, чтобы добавить",
+    engine_check: "Проверка",
+    engine_notfound: "Нет ffmpeg",
+    engine_offline: "Нет соединения",
     engine_hint: "поставь: winget install Gyan.FFmpeg",
-    mode_stealth_note: "выход по параметрам нативного экспорта редактора. потолок 1080 и 60 кадров: выше уже не похоже на телефон",
-    mode_max_note: "качество в приоритете, до 4k и без потолка по кадрам. если поток уже влезает в лимиты, он копируется без пережатия. под нативный экспорт такой файл не выдать",
+    mode_stealth_note: "H.264, до 1080 по короткой стороне и до 60 fps. Видео перекодируется, метаданные контейнера меняются.",
+    mode_max_note: "До 4K без ограничения fps. Совместимое видео копируется без перекодирования, остальное приводится к параметрам режима.",
     tag_copied: "без пережатия",
-    st_queued: "в очереди",
-    st_probing: "анализ",
-    st_uploading: "загрузка",
-    st_processing: "обработка",
-    st_done: "готово",
-    st_error: "ошибка",
-    st_cancelled: "отменено",
-    phase_encode: "компрессия",
-    phase_mask: "маскировка",
+    st_queued: "В очереди",
+    st_probing: "Анализ",
+    st_uploading: "Загрузка",
+    st_processing: "Обработка",
+    st_done: "Готово",
+    st_error: "Ошибка",
+    st_cancelled: "Отменено",
+    phase_encode: "Сжатие",
+    phase_mask: "Метаданные",
     attempt: "попытка",
     remove: "убрать",
-    show_error: "подробности ошибки",
+    show_error: "Подробности ошибки",
     job_progress: "{done} из {total} · {pct}%",
     job_left: "осталось ~{time}",
     result_done: "{n} готово, сэкономлено {saved}",
@@ -70,44 +70,55 @@ const I18N = {
     warn_mask_incomplete: "маскировка неполная: подпись энкодера осталась в файле",
     fps_uncapped: "fps без потолка",
     bpp: "бит/пкс",
-    ghost_name: "фиктивная аудиодорожка",
-    ghost_note: "добавляет копию звука с десятикратным числом сэмплов: оценщик видит 172 секунды вместо 17 и занижает битрейт. видео не трогается, fps честный, файл играется нормально",
+    ghost_name: "Фиктивная аудиодорожка",
+    ghost_note: "Добавляет копию звука с десятикратным числом сэмплов. Может влиять на совместимость файла. Сохранение качества после загрузки в TikTok не гарантировано.",
     tag_ghost: "звук раздут",
     unit_min: " мин", unit_sec: " с",
-    gb: "гб", mb: "мб", kb: "кб",
+    gb: "ГБ", mb: "МБ", kb: "КБ",
+    engine_ready: "Локально",
+    size_label: "Размер",
+    fps_label: "Частота кадров",
+    up_to: "до {value}",
+    ghost_short: "Экспериментальный метод",
+    details_label: "Подробнее о режиме",
+    output_label: "Результат в папке",
+    local_processing: "Обработка на этом компьютере",
+    btn_start_count: "Обработать видео ({n})",
+    btn_working: "Обработка...",
+    btn_starting: "Запуск...",
   },
   en: {
-    brand_sub: "compression and container masking",
-    modes_title: "mode",
-    queue_title: "queue",
-    btn_files: "files",
-    btn_folder: "folder",
-    btn_clear: "clear",
-    btn_cancel: "cancel",
-    btn_start: "start",
-    btn_open: "open folder",
-    empty_title: "drop video anywhere in the window",
-    empty_hint: "mp4, mov, mkv, webm and more. output is mp4 in a tiktok_ready folder next to the source",
-    drop_now: "drop it",
-    engine_check: "checking engine",
-    engine_notfound: "ffmpeg not found",
-    engine_offline: "server offline",
+    brand_sub: "Video preparation",
+    modes_title: "Processing",
+    queue_title: "Queue",
+    btn_files: "Add files",
+    btn_folder: "Folder",
+    btn_clear: "Clear",
+    btn_cancel: "Cancel",
+    btn_start: "Process videos",
+    btn_open: "Open folder",
+    empty_title: "Drop your videos here",
+    empty_hint: "MP4, MOV, MKV, WEBM and more",
+    drop_now: "Drop to add files",
+    engine_check: "Checking",
+    engine_notfound: "ffmpeg missing",
+    engine_offline: "Disconnected",
     engine_hint: "install it: winget install Gyan.FFmpeg",
-    mode_stealth_note: "output matches a native editor export. capped at 1080 and 60 fps: anything above stops looking like a phone",
-    mode_max_note: "quality first, up to 4k with no frame rate cap. a stream that already fits the limits is copied without re-encoding. a file like this cannot pass as a native export",
+    mode_stealth_note: "H.264, up to 1080 on the short side and 60 fps. Video is re-encoded and container metadata is changed.",
+    mode_max_note: "Up to 4K with no frame rate cap. Compatible video is copied without re-encoding; other files are converted.",
     tag_copied: "stream copied",
-    st_queued: "queued",
-    st_probing: "probing",
-    st_uploading: "uploading",
+    st_queued: "Queued",
+    st_probing: "Analyzing",
+    st_uploading: "Uploading",
     st_processing: "processing",
-    st_done: "done",
-    st_error: "error",
-    st_cancelled: "cancelled",
-    phase_encode: "encoding",
-    phase_mask: "masking",
+    st_done: "Done",
+    st_error: "Error",
+    st_cancelled: "Cancelled",
+    phase_encode: "Encoding",
+    phase_mask: "Metadata",
     attempt: "attempt",
     remove: "remove",
-    show_error: "error details",
+    show_error: "Error details",
     job_progress: "{done} of {total} · {pct}%",
     job_left: "~{time} left",
     result_done: "{n} done, {saved} saved",
@@ -122,11 +133,22 @@ const I18N = {
     warn_mask_incomplete: "masking incomplete: the encoder signature is still in the file",
     fps_uncapped: "uncapped fps",
     bpp: "bpp",
-    ghost_name: "ghost audio track",
-    ghost_note: "adds a copy of the audio with ten times the sample count: an estimator sees 172 seconds instead of 17 and underrates the bitrate. video is untouched, fps stays honest, the file plays fine",
+    ghost_name: "Ghost audio track",
+    ghost_note: "Adds an audio copy with ten times the sample count. This can affect file compatibility. Quality after uploading to TikTok is not guaranteed.",
     tag_ghost: "audio inflated",
     unit_min: " min", unit_sec: " s",
-    gb: "gb", mb: "mb", kb: "kb",
+    gb: "GB", mb: "MB", kb: "KB",
+    engine_ready: "Local",
+    size_label: "Dimensions",
+    fps_label: "Frame rate",
+    up_to: "up to {value}",
+    ghost_short: "Experimental method",
+    details_label: "About this mode",
+    output_label: "Output folder",
+    local_processing: "Processed on this computer",
+    btn_start_count: "Process videos ({n})",
+    btn_working: "Processing...",
+    btn_starting: "Starting...",
   },
 };
 
@@ -157,6 +179,7 @@ function applyLang(lang) {
     if (on) seg.dataset.index = i;
   });
   renderModes();
+  if (state.engineOk === true) setText($("#engine-text"), t("engine_ready"));
   render();
 }
 
@@ -241,8 +264,9 @@ async function checkEngine() {
     }
     if (s.ffmpeg && s.ffprobe) {
       box.className = "engine ok";
-      setText(txt, "ffmpeg " + (s.version || "").split("-")[0]);
-      setText($("#foot-engine"), s.ffmpeg_path || "");
+      setText(txt, t("engine_ready"));
+      box.title = "ffmpeg " + (s.version || "") + " | " + (s.ffmpeg_path || "");
+      setText($("#foot-engine"), t("local_processing"));
       state.engineOk = true;
       render();
       return true;
@@ -262,40 +286,28 @@ async function checkEngine() {
 
 /* ---------------- modes ---------------- */
 
-function modeSpec(m) {
-  const res = m.max_long + "x" + m.max_short;
-  const fps = m.max_fps ? Math.round(m.max_fps) + "fps" : t("fps_uncapped");
-  const rate = m.bpp ? m.bpp.toFixed(3) + " " + t("bpp") : "";
-  return [res, fps, rate].filter(Boolean);
-}
-
 function renderModes() {
   const box = $("#modes");
-  if (!box) return;
   box.textContent = "";
   for (const m of state.modes) {
     const on = m.id === state.mode;
     const btn = el("button", "mode" + (on ? " on" : ""));
     btn.type = "button";
     btn.dataset.mode = m.id;
+    btn.disabled = state.running;
     btn.setAttribute("role", "radio");
     btn.setAttribute("aria-checked", on);
-    const spec = el("span", "mode-spec");
-    modeSpec(m).forEach((chunk, i) => {
-      if (i) spec.appendChild(el("span", "sep", "·"));
-      spec.appendChild(el("span", null, chunk));
-    });
-    btn.append(
-      el("span", "mode-name", m.label),
-      spec,
-      el("span", "mode-note", t("mode_" + m.id + "_note")),
-    );
-    const tick = el("span", "mode-tick");
-    tick.setAttribute("aria-hidden", "true");
-    tick.appendChild(icon("i-check", ""));
-    btn.appendChild(tick);
+    btn.tabIndex = on ? 0 : -1;
+    btn.appendChild(el("span", "mode-name", m.label));
     box.appendChild(btn);
   }
+  const selected = state.modes.find((mode) => mode.id === state.mode);
+  if (!selected) return;
+  const dimensions = selected.max_short + " x " + selected.max_long;
+  setText($("#mode-size"), t("up_to", { value: dimensions }));
+  setText($("#mode-fps"), selected.max_fps
+    ? t("up_to", { value: Math.round(selected.max_fps) + " fps" }) : t("fps_uncapped"));
+  setText($("#mode-note"), t("mode_" + selected.id + "_note"));
 }
 
 /* ---------------- queue ---------------- */
@@ -370,7 +382,9 @@ function buildRow(item) {
   const pre = el("pre");
   err.append(summary, pre);
 
-  li.append(name, side, meta, bar, warn, err);
+  const fileIcon = el("span", "row-icon");
+  fileIcon.appendChild(icon("i-file"));
+  li.append(fileIcon, name, side, meta, bar, warn, err);
   li.parts = { name, status, remove, meta, bar, fill, warn, err, summary, pre };
 
   remove.addEventListener("click", () => {
@@ -403,7 +417,7 @@ function updateRow(li, item) {
   p.meta.textContent = "";
   if (info) p.meta.appendChild(el("span", null, fmtSpec(info)));
   if (item.status === "done" && item.after) {
-    p.meta.append(el("span", "sep", "→"), el("span", null, fmtSpec(item.after)));
+    p.meta.append(el("span", "sep", "/"), el("span", null, fmtSpec(item.after)));
     const saved = (info ? info.size : 0) - item.after.size;
     if (saved > 0) p.meta.appendChild(el("span", "saved", "-" + fmtSize(saved)));
     if (item.copied) p.meta.appendChild(el("span", "tag", t("tag_copied")));
@@ -464,16 +478,22 @@ function render() {
     anchor = li;
   }
 
-  setText($("#queue-count"), String(state.queue.length));
-  $("#empty").hidden = state.queue.length > 0;
+  setText($("#queue-count"), "(" + String(state.queue.length).padStart(2, "0") + ")");
+  $("#empty").classList.toggle("compact", state.queue.length > 0);
+  $("#empty").hidden = state.running;
 
   const pending = state.queue.filter((q) => RESTARTABLE.has(q.status)).length;
   const start = $("#btn-start");
-  start.disabled = state.running || !pending || state.engineOk === false;
+  start.disabled = starting || state.running || !pending || state.engineOk !== true;
+  setText(start.lastElementChild, state.running ? t("btn_working") : starting ? t("btn_starting")
+    : pending ? t("btn_start_count", { n: pending }) : t("btn_start"));
+  $("#ghost").disabled = state.running;
+  $("#modes").querySelectorAll("button").forEach((button) => { button.disabled = state.running; });
 
   const clear = $("#btn-clear");
   setText(clear.lastElementChild, state.running ? t("btn_cancel") : t("btn_clear"));
   clear.classList.toggle("danger", state.running);
+  clear.setAttribute("aria-label", state.running ? t("btn_cancel") : t("btn_clear"));
   clear.disabled = !state.queue.length && !state.running;
   $("#clear-ico").firstElementChild
     .setAttribute("href", state.running ? "#i-stop" : "#i-broom");
@@ -704,7 +724,23 @@ function init() {
     renderModes();
   });
 
+  $("#modes").addEventListener("keydown", (e) => {
+    if (state.running || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const modes = state.modes;
+    if (!modes.length) return;
+    const current = modes.findIndex((mode) => mode.id === state.mode);
+    const direction = e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 1;
+    const next = e.key === "Home" ? 0 : e.key === "End" ? modes.length - 1
+      : (current + direction + modes.length) % modes.length;
+    state.mode = modes[next].id;
+    localStorage.setItem("mode", state.mode);
+    renderModes();
+    $("#modes .on").focus();
+  });
+
   $("#btn-files").addEventListener("click", (e) => browse("files", e.currentTarget));
+  $("#empty").addEventListener("click", (e) => browse("files", e.currentTarget));
   $("#btn-folder").addEventListener("click", (e) => browse("folder", e.currentTarget));
   $("#btn-start").addEventListener("click", start);
   $("#btn-clear").addEventListener("click", clearOrCancel);
