@@ -4,7 +4,7 @@
 const $ = (s) => document.querySelector(s);
 
 const RESTARTABLE = new Set(["queued", "cancelled", "error"]);
-const GHOST_MULT = 10;           // во столько раз клон заявляет больше сэмплов
+const GHOST_MULT = 10;
 const STAGGER_STEP = 45;         // мс между появлением соседних строк
 const STAGGER_BUDGET = 270;      // потолок суммарной задержки входа
 const ROW_IN_MS = 380;           // держать в паре с row-in в style.css
@@ -41,7 +41,7 @@ const I18N = {
     engine_notfound: "Нет ffmpeg",
     engine_offline: "Нет соединения",
     engine_hint: "поставь: winget install Gyan.FFmpeg",
-    mode_stealth_note: "H.264, до 1080 по короткой стороне и до 60 fps. Видео перекодируется, метаданные контейнера меняются.",
+    mode_stealth_note: "H.264 Main, до 1080 по короткой стороне и до 60 fps. Видео перекодируется по параметрам сравнительного файла.",
     mode_max_note: "До 4K без ограничения fps. Совместимое видео копируется без перекодирования, остальное приводится к параметрам режима.",
     tag_copied: "без пережатия",
     st_queued: "В очереди",
@@ -70,8 +70,8 @@ const I18N = {
     warn_mask_incomplete: "маскировка неполная: подпись энкодера осталась в файле",
     fps_uncapped: "fps без потолка",
     bpp: "бит/пкс",
-    ghost_name: "Фиктивная аудиодорожка",
-    ghost_note: "Добавляет копию звука с десятикратным числом сэмплов. Может влиять на совместимость файла. Сохранение качества после загрузки в TikTok не гарантировано.",
+    ghost_name: "Фиктивные аудиосэмплы",
+    ghost_note: "Увеличивает число аудиосэмплов в 10 раз: в Stealth в основной дорожке, в Max в её копии. Может влиять на совместимость. Качество публикации нужно проверять.",
     tag_ghost: "звук раздут",
     unit_min: " мин", unit_sec: " с",
     gb: "ГБ", mb: "МБ", kb: "КБ",
@@ -104,7 +104,7 @@ const I18N = {
     engine_notfound: "ffmpeg missing",
     engine_offline: "Disconnected",
     engine_hint: "install it: winget install Gyan.FFmpeg",
-    mode_stealth_note: "H.264, up to 1080 on the short side and 60 fps. Video is re-encoded and container metadata is changed.",
+    mode_stealth_note: "H.264 Main, up to 1080 on the short side and 60 fps. Video is re-encoded using settings derived from the reference file.",
     mode_max_note: "Up to 4K with no frame rate cap. Compatible video is copied without re-encoding; other files are converted.",
     tag_copied: "stream copied",
     st_queued: "Queued",
@@ -133,8 +133,8 @@ const I18N = {
     warn_mask_incomplete: "masking incomplete: the encoder signature is still in the file",
     fps_uncapped: "uncapped fps",
     bpp: "bpp",
-    ghost_name: "Ghost audio track",
-    ghost_note: "Adds an audio copy with ten times the sample count. This can affect file compatibility. Quality after uploading to TikTok is not guaranteed.",
+    ghost_name: "Ghost audio samples",
+    ghost_note: "Multiplies the audio sample count by 10: on the main track in Stealth, on a copy in Max. This can affect compatibility. Published quality needs checking.",
     tag_ghost: "audio inflated",
     unit_min: " min", unit_sec: " s",
     gb: "GB", mb: "MB", kb: "KB",

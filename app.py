@@ -2,12 +2,14 @@
 # Zero external Python dependencies (stdlib only).
 
 import json
+import math
 import os
 import random
 import re
 import shutil
 import socket
 import subprocess
+import struct
 import sys
 import threading
 import time
@@ -85,6 +87,44 @@ def ffmpeg_version():
 # ---------------------------------------------------------------- probing
 
 
+def movie_duration(path):
+    try:
+        with open(path, "rb") as source:
+            end = os.fstat(source.fileno()).st_size
+            position = 0
+            in_moov = False
+            while position + 8 <= end:
+                source.seek(position)
+                size, kind = struct.unpack(">I4s", source.read(8))
+                header = 8
+                if size == 1:
+                    size = struct.unpack(">Q", source.read(8))[0]
+                    header = 16
+                elif size == 0:
+                    size = end - position
+                if size < header or position + size > end:
+                    return None
+                if kind == b"moov" and not in_moov:
+                    end = position + size
+                    position += header
+                    in_moov = True
+                    continue
+                if kind == b"mvhd" and in_moov:
+                    data = source.read(min(32, size - header))
+                    if not data or data[0] not in (0, 1):
+                        return None
+                    version = data[0]
+                    scale_offset, duration_offset = (20, 24) if version else (12, 16)
+                    timescale = struct.unpack_from(">I", data, scale_offset)[0]
+                    duration = struct.unpack_from(">Q" if version else ">I", data, duration_offset)[0]
+                    unknown = (1 << (64 if version else 32)) - 1
+                    return duration / timescale if timescale and 0 < duration < unknown else None
+                position += size
+    except (OSError, struct.error):
+        return None
+    return None
+
+
 def probe(path: str):
     refresh_binaries()
     if not FFPROBE:
@@ -132,6 +172,7 @@ def probe(path: str):
         "name": os.path.basename(path),
         "size": size,
         "duration": float(fmt.get("duration", 0) or 0),
+        "movie_duration": movie_duration(path),
         "bitrate": int(fmt.get("bit_rate", 0) or 0),
         "width": v.get("width"),
         "height": v.get("height"),
@@ -162,34 +203,25 @@ def _env(name, default, cast=str):
 SCALE_FLAGS = _env("SWS", "lanczos+accurate_rnd+full_chroma_int")
 BRAND = _env("BRAND", "youpzdev")
 
-# Два режима с разными целями - совместить их в одном профиле нельзя.
-#
-# stealth: выход должен быть неотличим от нативного экспорта мобильного редактора.
-#   Эталон (MediaInfo, 2026-08-29): 1080×1200@60 CFR, AVC High L4.2, refs 4, CABAC,
-#   16.1 Мбит/с при потолке 31 948 000, BT.709 в контейнере, AAC LC CBR ~200 кбит/с,
-#   Encoded_Library "EditingVC1-v1.5.0.2", Encoded_Application - JSON редактора.
-#   Отсюда потолок 1080/60 и уровень 4.2: 4K или fps выше 60 такому экспорту
-#   не соответствуют ни одним полем и сами по себе выдают обработку.
-#
-# max: качество важнее незаметности - до 4K и fps без ограничения (до 300).
-#   Уровень H.264 отдаётся энкодеру, маскировка метаданных остаётся, но
-#   выдать такой файл за нативный экспорт невозможно.
 PROFILES = {
     "stealth": {
         "label": "Stealth",
+        "recipe": "reference",
+        "video_profile": "main",
+        "scene_threshold": 40,
         "max_short": _env("S_SHORT", 1080, int),
         "max_long": _env("S_LONG", 1920, int),
         "max_fps": _env("S_FPS", 60.0, float),
         "crf": _env("S_CRF", 16, int),
-        "bpp": _env("S_BPP", 0.232, float),   # 18 Мбит/с на 1080p60: проверено заливкой
-        "maxrate": _env("S_MAXRATE", "31948k"),
-        "bufsize": _env("S_BUFSIZE", "63896k"),
-        "preset": _env("S_PRESET", "slow"),
-        "refs": _env("S_REFS", 4, int),
-        "level": _env("S_LEVEL", "4.2"),
+        "bpp": _env("S_BPP", 0.232, float),
+        "maxrate": _env("S_MAXRATE", ""),
+        "bufsize": _env("S_BUFSIZE", ""),
+        "preset": _env("S_PRESET", "medium"),
+        "refs": _env("S_REFS", 1, int),
+        "level": _env("S_LEVEL", "5.2"),
         "audio_bitrate": _env("S_ABR", "200k"),
         "reencode": "always",
-        "x264_params": _env("S_X264", "weightb=0:chroma-qp-offset=0"),
+        "x264_params": _env("S_X264", "weightb=0:chroma-qp-offset=2"),
         "footer": True,
     },
     "max": {
@@ -214,16 +246,8 @@ DEFAULT_MODE = _env("MODE", "stealth")
 if DEFAULT_MODE not in PROFILES:
     DEFAULT_MODE = "stealth"
 
-# Раздувание счётчика кадров: контейнер заявляет во столько раз больше кадров,
-# из-за чего наблюдаемый битрейт выглядит низким и файл реже пережимают. Приём
-# работал до тех пор, пока файл заодно был подписан "Patched by ..." и строкой
-# настроек x264 - тогда ролики начали прятать. Подписей больше нет, так что
-# рычаг вынесен отдельным переключателем и проверяется независимо.
 INFLATE_DEFAULT = _env("INFLATE", 0, int)
 
-# Клон аудиодорожки с фиктивными сэмплами: анализатор, считающий длительность по
-# числу аудиокадров, видит время в GHOST раз больше и занижает битрейт. Видео при
-# этом не тронуто, fps честный. Приём взят из файла рабочего патчера.
 GHOST_DEFAULT = _env("GHOST", 10, int)
 
 # Строка энкодера, которая уходит в SEI вместо настроек x264, и шаблон ©too.
@@ -312,6 +336,47 @@ def build_command(src: str, dst: str, info: dict, profile: dict):
     return build_reencode_command(src, dst, info, profile)
 
 
+REFERENCE_SEI_FILTER = (
+    "filter_units=remove_types=6,h264_metadata=sei_user_data="
+    "dc45e9bde6d948b7a2cb100000000000+evc0 v1.4.2.2-20260920"
+)
+
+
+def reference_fps(info, profile):
+    source_fps = info.get("fps") or 60.0
+    if not math.isfinite(source_fps) or source_fps <= 0:
+        source_fps = 60.0
+    duration, frames = info.get("duration") or 0, info.get("frames") or 0
+    measured = frames / duration if frames > 0 and duration > 0 else source_fps
+    if not math.isfinite(measured) or measured < source_fps * 0.95:
+        measured = source_fps
+    return round(min(source_fps, profile["max_fps"] or source_fps, measured), 6)
+
+
+def reference_rates(info, profile):
+    duration = info.get("movie_duration") or info.get("duration") or 0
+    size = info.get("size") or 0
+    if math.isfinite(duration) and duration > 0 and size > 0:
+        rate = max(1, int(size * 8 / duration / 1000))
+    else:
+        width, height = info.get("width") or 1080, info.get("height") or 1920
+        factor = min(1.0, profile["max_short"] / min(width, height),
+                     profile["max_long"] / max(width, height))
+        rate = max(1, int((profile.get("bpp") or 0.232) * width * height * factor ** 2
+                         * reference_fps(info, profile) / 1000))
+    return f"{rate}k", profile.get("maxrate") or f"{rate * 2}k", profile.get("bufsize") or f"{rate * 3}k"
+
+
+def reference_encoder_json(info, profile):
+    rate, maxrate, _ = reference_rates(info, profile)
+    def bits(value):
+        suffix = value[-1:].lower()
+        return int(float(value[:-1]) * (1000 if suffix == "k" else 1000000)) if suffix in ("k", "m") else int(value)
+    return json.dumps({"aid": "0", "libevc": "0", "trans_type": "-2",
+                       "bitrate": str(bits(rate)), "maxrate": str(bits(maxrate)),
+                       "extra": "{}"}, separators=(",", ":"))
+
+
 def target_rate_args(info: dict, profile: dict):
     """Целевой битрейт вместо чистого CRF.
 
@@ -333,9 +398,7 @@ def target_rate_args(info: dict, profile: dict):
 
 
 def build_reencode_command(src: str, dst: str, info: dict, profile: dict):
-    """Реэнкод под выбранный профиль: вписывание в кадр без апскейла, x264 high,
-    BT.709 в контейнере, AAC 48 кГц. Входные метаданные отбрасываются, тег
-    автора ставится здесь, остальная маскировка - на втором шаге."""
+    reference = profile.get("recipe") == "reference"
     vf = []
     w, h = info.get("width") or 0, info.get("height") or 0
     if w and h:
@@ -351,23 +414,32 @@ def build_reencode_command(src: str, dst: str, info: dict, profile: dict):
     fps_cap = profile["max_fps"]
     if fps_cap and (info.get("fps") or 0) > fps_cap + 0.05:
         vf.append(f"fps={fps_cap:g}")
+    if reference:
+        fps_out = reference_fps(info, profile)
+        source_fps = info.get("fps") or fps_out
+        timing_fps = min(source_fps, fps_cap) if fps_cap else source_fps
+        vf.append(f"setpts=STARTPTS+(PTS-STARTPTS)*{timing_fps / fps_out:.12f}")
 
     cmd = [FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
            "-progress", "pipe:1", "-nostats",
            "-i", src, "-map", "0:v:0", "-map", "0:a:0?"]
     if vf:
         cmd += ["-vf", ",".join(vf), "-sws_flags", SCALE_FLAGS]
-    # Ровный интервал ключевых кадров: у рабочего файла GOP держится в пределах
-    # 64-120 кадров, а x264 по умолчанию растягивал первые группы до 235, что для
-    # анализатора выглядит как склейка сцен.
-    fps_out = min(info.get("fps") or 60, profile["max_fps"] or (info.get("fps") or 60))
-    keyint = max(24, int(round(fps_out * 2)))
-    cmd += ["-c:v", "libx264", "-profile:v", "high",
+    fps_out = reference_fps(info, profile) if reference else min(
+        info.get("fps") or 60, profile["max_fps"] or (info.get("fps") or 60))
+    keyint = max(1, int(fps_out * 2)) if reference else max(24, int(round(fps_out * 2)))
+    cmd += ["-c:v", "libx264", "-profile:v", profile.get("video_profile", "high"),
             "-preset", profile["preset"],
             "-g", str(keyint), "-keyint_min", str(max(12, keyint // 2)),
-            "-sc_threshold", "0"]
-    cmd += target_rate_args(info, profile)
-    cmd += ["-maxrate", profile["maxrate"], "-bufsize", profile["bufsize"],
+            "-sc_threshold", str(profile.get("scene_threshold", 0))]
+    if reference:
+        rate, maxrate, bufsize = reference_rates(info, profile)
+        cmd += ["-b:v", rate, "-r", f"{fps_out:.6f}", "-bf", "3",
+                "-bsf:v", REFERENCE_SEI_FILTER, "-metadata:s:v:0", "encoder=Lavc libx264"]
+    else:
+        cmd += target_rate_args(info, profile)
+        maxrate, bufsize = profile["maxrate"], profile["bufsize"]
+    cmd += ["-maxrate", maxrate, "-bufsize", bufsize,
             "-refs", str(profile["refs"]),
             "-pix_fmt", "yuv420p", "-fps_mode", "cfr",
             # эталон помечает BT.709 в контейнере - без этого плеер/TikTok угадывает
@@ -378,8 +450,6 @@ def build_reencode_command(src: str, dst: str, info: dict, profile: dict):
             "-map_metadata", "-1", "-metadata", f"artist={BRAND}"]
     if profile["level"]:
         cmd += ["-level", profile["level"]]
-    # PPS рабочего файла собран без 8x8-трансформа и с одним опорным кадром;
-    # x264 по умолчанию пишет обратное, и пара SPS+PPS сразу выдаёт чужой энкодер.
     if profile.get("x264_params"):
         cmd += ["-x264-params", profile["x264_params"]]
     cmd += ["-movflags", "+faststart", dst]
@@ -476,12 +546,16 @@ def process_job(job_id: str):
                 # копирования, честнее пережать, чем отдать файл с ошибкой
                 item["progress"] = 0.97
                 try:
-                    patch = mp4mask.mask(
-                        tmp, dst, sei_text=MASK_SEI,
-                        too_value=mp4mask.encoder_json(MASK_MAXRATE_BPS,
-                                                       random.randint(10 ** 8, 10 ** 9 - 1),
-                                                       time.time()),
-                        ghost=ghost, inflate=inflate)
+                    if profile.get("recipe") == "reference":
+                        patch = mp4mask.mask_reference(
+                            tmp, dst, ghost=ghost, too_value=reference_encoder_json(info, profile))
+                    else:
+                        patch = mp4mask.mask(
+                            tmp, dst, sei_text=MASK_SEI,
+                            too_value=mp4mask.encoder_json(MASK_MAXRATE_BPS,
+                                                           random.randint(10 ** 8, 10 ** 9 - 1),
+                                                           time.time()),
+                            ghost=ghost, inflate=inflate)
                     break
                 except Exception as e:
                     # mask() пишет через .part и переименовывает, так что готовый
