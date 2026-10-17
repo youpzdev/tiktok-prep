@@ -95,6 +95,21 @@ async function main() {
         assert(fs.existsSync(path.join(scratch, 'tiktok_ready', 'video_tiktok.mp4')));
         await page.screenshot({ path: path.join(shots, '06-desktop-result.png'), fullPage: true });
         checks.push('real processing and result');
+        await page.locator('#btn-clear').click();
+        await page.locator('[data-mode="max"]').click();
+        await page.locator('#btn-files').click();
+        await page.locator('.row.queued').waitFor();
+        const maxRequest = page.waitForRequest(request => request.url().endsWith('/api/process'));
+        await page.locator('#btn-start').click();
+        assert.equal((await maxRequest).postDataJSON().mode, 'max');
+        await page.locator('.row.done').waitFor({ timeout: 120000 });
+        const maxItem = await page.evaluate(() => state.queue[0]);
+        assert.equal(maxItem.copied, false);
+        assert(maxItem.patch.ghost_samples > 0);
+        assert(maxItem.after.fps <= 60);
+        await page.screenshot({ path: path.join(shots, '11-desktop-max-result.png'), fullPage: true });
+        await page.locator('[data-mode="stealth"]').click();
+        checks.push('real Max processing from the new interface');
       } else {
         let processBody;
         let cancelled = false;

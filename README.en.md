@@ -11,11 +11,10 @@ The software is free. Terms of use: [non-commercial license](LICENSE).
 
 ## What has been verified
 
-The new Stealth mode follows the observed parameters of a file that, according
-to the user, retained high quality after processing with another tool and
-publishing. Local checks cover container structure, video decoding and preservation
-of real audio samples during patching. Publishing an output from this version
-has not been tested yet.
+On 17 October 2026, the user confirmed successful Stealth publishing with ghost
+audio samples. Local checks cover the container, video stream and preservation
+of real audio samples. The updated Max uses the same container method with
+more thorough encoding; its published output has not been compared yet.
 
 TikTok decides how to process uploaded video. Matching the reference metadata
 does not guarantee resolution, frame rate or reach. Some settings of the other
@@ -48,10 +47,10 @@ Default settings:
 
 | Parameter | Stealth | Max |
 |---|---|---|
-| Dimensions | short side up to 1080, long side up to 1920 | short side up to 2160, long side up to 3840 |
-| Frame rate | no higher than source or 60, may be fractional | no profile cap |
-| Video | always H.264 Main L5.2 | copies suitable 8-bit H.264; otherwise H.264 High |
-| Bitrate | based on input file size and duration | 0.26 bits per pixel when encoding |
+| Dimensions | short side up to 1080, long side up to 1920 | short side up to 1080, long side up to 1920 |
+| Frame rate | no higher than source or 60, may be fractional | no higher than source or 60, may be fractional |
+| Video | always H.264 Main L5.2 | always H.264 Main L5.2 |
+| Bitrate | based on input file size and duration | CRF14, 40 Mbit/s peak limit, slow |
 | Audio when encoding | AAC LC, 48 kHz, stereo, 200 kbit/s | AAC LC, 48 kHz, stereo, 320 kbit/s |
 
 Video is not upscaled. Missing audio is not created.
@@ -99,13 +98,11 @@ encoding profile and its metadata still apply.
 
 ### Max
 
-Max retains its previous processing. Suitable 8-bit H.264 is copied without
-re-encoding the image. A different size or format triggers encoding; a failed
-stream copy also falls back to encoding.
-
-Legacy masking removes x264 SEI and `btrt`, and changes `compressorname` and
-`©too`. When dummy audio is enabled, it adds a separate inflated clone of the
-audio track. These operations describe Max, not the new Stealth mode.
+Max always encodes video: H.264 Main L5.2, slow preset, refs=4, CRF14,
+40M maxrate and 80M bufsize. Variable bitrate follows image complexity.
+Dimension and frame-rate limits, SEI and container rules match Stealth.
+Ghost samples use a single audio track without a clone. Encoding takes longer
+and may produce a larger file. Local checks do not prove better TikTok uploads.
 
 ## Settings
 
@@ -118,11 +115,9 @@ Set environment variables before launching. The full set is in `app.py`.
 | `TT_S_SHORT`, `TT_S_LONG`, `TT_S_FPS` | Stealth limits |
 | `TT_S_MAXRATE`, `TT_S_BUFSIZE` | explicit rate limits instead of the 2x and 3x defaults |
 | `TT_S_PRESET`, `TT_S_REFS`, `TT_S_LEVEL`, `TT_S_X264`, `TT_S_ABR` | Stealth encoder settings |
-| `TT_M_REENCODE` | Max behavior, `auto` by default |
-| `TT_M_BPP`, `TT_M_CRF`, `TT_M_MAXRATE`, `TT_M_BUFSIZE` | Max encoding settings |
+| `TT_M_CRF`, `TT_M_MAXRATE`, `TT_M_BUFSIZE` | Max encoding settings |
 | `TT_GHOST` | default dummy sample multiplier, 10 |
 | `TT_BRAND` | artist tag value |
-| `TT_SEI`, `TT_MASK_MAXRATE` | legacy Max masking metadata |
 
 ## Output
 
@@ -141,9 +136,9 @@ reference found Main L5.2, retained `btrt`, SEI and one inflated audio track
 instead of a clone. That comparison does not support the old claim that every
 successful file must have all SEI and `btrt` removed.
 
-The cause of the publication quality difference remains unknown. Current Stealth
-reproduces the observed combination for the next publication test. Task details
-and findings are in [project state](docs/project-state.md).
+The cause of the earlier publication quality difference remains unknown. The user
+has confirmed that the current Stealth method works. The updated Max needs its
+own publishing comparison. Task details are in [project state](docs/project-state.md).
 
 ## License
 

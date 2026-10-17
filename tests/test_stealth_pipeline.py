@@ -55,11 +55,11 @@ class StealthPipelineTests(unittest.TestCase):
         self.assertTrue(math.isfinite(float(command[command.index("-r") + 1])))
         self.assertGreater(int(command[command.index("-b:v") + 1][:-1]), 0)
 
-    def test_max_stream_copy_unchanged(self):
+    def test_max_uses_reference_reencode(self):
         command = self.command("max")
-        self.assertEqual(command[command.index("-c:v") + 1], "copy")
-        self.assertNotIn("-bsf:v", command)
-        self.assertNotIn("-r", command)
+        self.assertEqual(command[command.index("-c:v") + 1], "libx264")
+        self.assertEqual(command[command.index("-bsf:v") + 1], app.REFERENCE_SEI_FILTER)
+        self.assertEqual(command[command.index("-r") + 1], "59.357677")
 
     def test_movie_duration_versions_and_unknown(self):
         with tempfile.TemporaryDirectory() as directory:

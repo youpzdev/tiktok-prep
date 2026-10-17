@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="TikTok Prep: локальная подготовка видео к публикации. Режимы Stealth и Max, пакетная обработка и готовый MP4.">
+  <title>TikTok Prep | by youpzdev</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f1eee8'/%3E%3Cpath d='M12 8v16l12-8z' fill='%230b0c0e'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/ribbon.js"></script>
+  <script defer src="/app.js"></script>
+  <script defer src="/motion.js"></script>
+</head>
+<body>
+<canvas id="ribbon" aria-hidden="true"></canvas>
+<svg class="sprite" aria-hidden="true"><defs>
+  <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7zM14 3v5h4M9 13h6M9 17h4"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6h6l2 3h10v11H3z"/></symbol>
+  <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+</defs></svg>
+<div class="page">
+  <header class="header">
+    <a class="brand" href="#top" aria-label="TikTok Prep"><span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16l13-8z" fill="currentColor"/></svg></span>TikTok Prep<span class="brand-by">by youpzdev</span></a>
+    <nav aria-label="Navigation"><a href="#workspace" data-i18n="nav_process">Обработка</a><a href="#guide" data-i18n="nav_guide">Как это работает</a></nav>
+    <div class="languages" id="lang" role="group" aria-label="Language"><button type="button" data-lang="ru">RU</button><span aria-hidden="true">/</span><button type="button" data-lang="en">EN</button></div>
+  </header>
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow" data-i18n="eyebrow">Для тех, кто делает монтаж</p>
+      <h1 id="hero-title"><span data-i18n="hero_first">Монтаж готов.</span><br><span class="hero-muted" data-i18n="hero_second">Подготовь к TikTok.</span></h1>
+      <p class="hero-description" data-i18n="hero_description">Два режима подготовки, одна очередь и готовый MP4. Всё на твоём компьютере.</p>
+      <button class="button hero-action" id="hero-add" type="button"><span data-i18n="hero_action">Выбрать видео</span><svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+      <p class="hero-caption" data-i18n="hero_caption">Бесплатно для личного использования. Без облака.</p>
+    </section>
+    <section class="workspace" id="workspace" aria-labelledby="workspace-title">
+      <div class="workspace-head"><div class="section-heading"><span class="section-index">01</span><h2 id="workspace-title" data-i18n="workspace_title">Подготовка видео</h2></div><div class="engine" id="engine" role="status"><span class="engine-dot" aria-hidden="true"></span><span id="engine-text" data-i18n="engine_check">Проверка ffmpeg</span><button type="button" id="btn-reconnect" hidden data-i18n="retry">Повторить</button></div></div>
+      <div class="work-grid">
+        <section class="queue-section" aria-labelledby="queue-title">
+          <div class="queue-head"><h3 id="queue-title"><span data-i18n="queue_title">Очередь</span><span id="queue-count">0</span></h3><div class="queue-actions"><button class="text-button" id="btn-files" type="button"><svg class="ico" aria-hidden="true"><use href="#i-add"/></svg><span data-i18n="btn_files">Добавить файлы</span></button><button class="text-button" id="btn-folder" type="button"><svg class="ico" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="btn_folder">Папка</span></button></div></div>
+          <div class="notice" id="notice" role="alert" hidden><span id="notice-text"></span><button class="icon-btn" id="notice-close" type="button" aria-label="Закрыть"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+          <p class="upload" id="upload" role="status" hidden></p>
+          <div class="queue-scroll" id="scroll"><ol id="queue" class="queue" aria-live="polite"></ol><button class="drop-area" id="empty" type="button"><span class="drop-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#i-drop"/></svg></span><strong data-i18n="empty_title">Перетащи видео сюда</strong><span data-i18n="empty_hint">или нажми, чтобы выбрать файлы</span><small>MP4, MOV, MKV, WEBM</small></button></div>
+          <div id="jobline" class="jobline" role="status" hidden><div class="progress-track"><div id="jobbar-fill"></div></div><span id="jobtext"></span></div>
+          <div class="result" id="result" role="status" hidden><div><strong id="result-text"></strong><span id="foot-out" class="result-path"></span></div><button class="button secondary" id="btn-open" type="button"><svg class="ico" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="btn_open">Открыть папку</span></button></div>
+        </section>
+        <aside class="settings" aria-labelledby="modes-title">
+          <h3 id="modes-title" data-i18n="modes_title">Режим обработки</h3>
+          <div class="mode-list" id="modes" role="radiogroup" aria-labelledby="modes-title"></div>
+          <p class="mode-note" id="mode-note"></p>
+          <dl class="mode-facts"><div><dt data-i18n="size_label">Размер</dt><dd id="mode-size"></dd></div><div><dt data-i18n="fps_label">Частота</dt><dd id="mode-fps"></dd></div></dl>
+          <label class="switch" for="ghost"><span data-i18n="ghost_name">Фиктивные аудиосэмплы</span><input id="ghost" type="checkbox" checked><span class="switch-track" aria-hidden="true"></span></label>
+          <details class="method-details"><summary data-i18n="details_label">Что меняется в файле</summary><p data-i18n="ghost_note">В одной аудиодорожке число сэмплов увеличивается в 10 раз. Реальный звук сохраняется. Фиктивный хвост может влиять на совместимость с плеерами.</p></details>
+        </aside>
+      </div>
+      <div class="action-dock"><p class="output-hint"><svg class="ico" aria-hidden="true"><use href="#i-folder"/></svg><span><span data-i18n="output_label">Результат рядом с исходником</span><strong>tiktok_ready</strong></span></p><div class="dock-actions"><button class="button secondary" id="btn-clear" type="button" disabled><span data-i18n="btn_clear">Очистить</span></button><button class="button primary" id="btn-start" type="button" disabled><span data-i18n="btn_start">Обработать видео</span><svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
+    </section>
+    <section class="guide" id="guide" aria-labelledby="guide-title"><div class="guide-heading"><span class="section-index">02</span><h2 id="guide-title" data-i18n="guide_title">От исходника до публикации</h2></div><div class="guide-columns"><article><span class="step-number">01 /</span><h3 data-i18n="guide_one_title">Добавь исходники</h3><p data-i18n="guide_one">Один файл, несколько роликов или вся папка. Исходники остаются без изменений.</p></article><article><span class="step-number">02 /</span><h3 data-i18n="guide_two_title">Выбери свой режим</h3><p data-i18n="guide_two">Stealth для обычной подготовки. Max для более тщательного кодирования: дольше, с большим запасом качества.</p></article><article><span class="step-number">03 /</span><h3 data-i18n="guide_three_title">Забери готовый MP4</h3><p data-i18n="guide_three">Открой папку с результатом и публикуй. Итоговое разрешение и FPS после загрузки выбирает TikTok.</p></article></div></section>
+  </main>
+  <footer class="footer"><a href="https://t.me/youpzlabnsfw" target="_blank" rel="noopener">youpzdev / Telegram</a><span id="foot-engine" data-i18n="local_processing">Обработка на этом компьютере</span><span data-i18n="footer_note">Без облака и телеметрии</span></footer>
+</div>
+<div id="drop-veil" class="drop-veil" hidden><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#i-drop"/></svg><strong data-i18n="drop_now">Отпусти, чтобы добавить</strong></div>
+</body>
+</html>
