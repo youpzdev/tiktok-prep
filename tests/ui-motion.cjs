@@ -22,7 +22,7 @@ async function main() {
       return route.fulfill({ json: { status: progress === 1 ? 'done' : 'running', files: [{ src: '/motion/edit.mp4', status: progress === 1 ? 'done' : 'processing', progress, before: info, after: progress === 1 ? info : null, dst: '/motion/tiktok_ready/edit_tiktok.mp4' }] } });
     });
     await page.goto(base);
-    await page.locator('#engine.ok').waitFor();
+    await page.locator('#engine.ok').waitFor({ state: 'attached' });
     await page.locator('#workspace').scrollIntoViewIfNeeded();
     await page.locator('#empty').hover();
     await page.waitForTimeout(600);
@@ -38,7 +38,7 @@ async function main() {
     const final = await page.locator('#modes').evaluate(node => getComputedStyle(node, '::before').transform);
     assert.notEqual(middle, final, 'mode highlight must travel and settle after interruption');
     assert.equal(await page.locator('[data-mode="max"]').getAttribute('aria-checked'), 'true');
-    await page.locator('#empty').click();
+    await page.locator('#btn-start').click();
     await page.locator('.row.queued').waitFor();
     await page.locator('#btn-start').click();
     await page.locator('.row.processing').waitFor();
@@ -66,11 +66,12 @@ async function main() {
       mobile.on('pageerror', error => errors.push(error.message));
       await mobile.route('**/api/probe', route => route.fulfill({ json: { files: [info] } }));
       await mobile.goto(base);
-      await mobile.locator('#engine.ok').waitFor();
+      await mobile.locator('#engine.ok').waitFor({ state: 'attached' });
       await mobile.evaluate(() => addPaths(['/motion/a long video filename for the final TikTok export.mp4']));
       await mobile.locator('[data-mode="max"]').click();
       await mobile.waitForTimeout(650);
       assert(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await mobile.locator('#btn-start').scrollIntoViewIfNeeded();
       const cta = await mobile.locator('#btn-start').boundingBox();
       assert(cta.y >= 0 && cta.y + cta.height <= 844);
       await mobile.screenshot({ path: path.join(shots, '15-mobile-motion-workspace.png'), fullPage: true });

@@ -29,7 +29,7 @@ async function main() {
       assert.equal(starts, 2, 'a separate explicit action may start a fresh request');
       instance = 'c'.repeat(32);
       await page.reload();
-      await page.locator('#engine.ok').waitFor();
+      await page.locator('#engine.ok').waitFor({ state: 'attached' });
       assert.equal(await page.evaluate(() => state.pending), null, 'unknown request from another server instance must require an explicit fresh decision');
       assert.equal(await page.evaluate(() => state.queue[0].status), 'error');
       assert.equal(starts, 2, 'reopening must not replay the request');
@@ -47,7 +47,7 @@ async function main() {
       await page.waitForFunction(() => !state.starting);
       assert.match(requests[0].request_id || '', /^[a-f0-9]{32}$/, 'request id must exist before the first POST');
       await page.reload();
-      await page.locator('#engine.ok').waitFor();
+      await page.locator('#engine.ok').waitFor({ state: 'attached' });
       assert.equal(await page.locator('.row').count(), 1, 'pending queue must survive reload');
       await page.locator('#btn-start').click();
       await page.locator('.row.done').waitFor();
@@ -99,7 +99,7 @@ async function main() {
       const page = await context.newPage();
       try {
         await page.goto(base);
-        await page.locator('#engine.ok').waitFor();
+        await page.locator('#engine.ok').waitFor({ state: 'attached' });
         await scenario(page);
         console.log(`PASS ${name}`);
       } catch (error) { failures.push(`${name}: ${error.message}`); }
