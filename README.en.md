@@ -13,8 +13,9 @@ The software is free. Terms of use: [non-commercial license](LICENSE).
 
 On 17 October 2026, the user confirmed successful Stealth publishing with ghost
 audio samples. Local checks cover the container, video stream and preservation
-of real audio samples. The updated Max uses the same container method with
-more thorough encoding; its published output has not been compared yet.
+of real audio samples. On 18 October 2026, the author confirmed a Max upload
+retaining 4K and 120 FPS. This is the result of his check, not a guarantee
+for every upload.
 
 TikTok decides how to process uploaded video. Matching the reference metadata
 does not guarantee resolution, frame rate or reach. Some settings of the other
@@ -47,10 +48,10 @@ Default settings:
 
 | Parameter | Stealth | Max |
 |---|---|---|
-| Dimensions | short side up to 1080, long side up to 1920 | short side up to 1080, long side up to 1920 |
-| Frame rate | no higher than source or 60, may be fractional | no higher than source or 60, may be fractional |
-| Video | always H.264 Main L5.2 | always H.264 Main L5.2 |
-| Bitrate | based on input file size and duration | CRF14, 40 Mbit/s peak limit, slow |
+| Dimensions | short side up to 1080, long side up to 1920 | short side up to 2160, long side up to 3840 |
+| Frame rate | no higher than source or 60, may be fractional | no higher than source or 120, may be fractional |
+| Video | always H.264 Main L5.2 | always H.264 Main L6.0 |
+| Bitrate | based on input file size and duration | CRF14, 240 Mbit/s peak limit, slow |
 | Audio when encoding | AAC LC, 48 kHz, stereo, 200 kbit/s | AAC LC, 48 kHz, stereo, 320 kbit/s |
 
 Video is not upscaled. Missing audio is not created.
@@ -98,11 +99,14 @@ encoding profile and its metadata still apply.
 
 ### Max
 
-Max always encodes video: H.264 Main L5.2, slow preset, refs=4, CRF14,
-40M maxrate and 80M bufsize. Variable bitrate follows image complexity.
-Dimension and frame-rate limits, SEI and container rules match Stealth.
+Max always encodes video: H.264 Main L6.0, slow preset, refs=4, CRF14,
+240M maxrate and 240M bufsize. Variable bitrate follows image complexity.
+Limits are 2160 on the short side, 3840 on the long side, and 120 FPS.
+Lower source resolution and frame rate are not increased. SEI and container
+rules match Stealth.
 Ghost samples use a single audio track without a clone. Encoding takes longer
-and may produce a larger file. Local checks do not prove better TikTok uploads.
+and may produce a larger file. On 18 October 2026, the author confirmed a Max
+upload retaining 4K/120. Results may differ for other uploads.
 
 ## Settings
 
