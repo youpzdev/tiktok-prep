@@ -2,37 +2,32 @@
 
 const $ = selector => document.querySelector(selector);
 const messages = {
-  nav_process: ["Обработка", "Process"], nav_guide: ["Как это работает", "How it works"],
-  eyebrow: ["Для тех, кто делает монтаж", "For those who make the cut"],
-  hero_first: ["Монтаж готов.", "Your edit is ready."], hero_second: ["Подготовь к TikTok.", "Get it TikTok ready."],
-  hero_description: ["Два режима подготовки, одна очередь и готовый MP4. Всё на твоём компьютере.", "Two preparation modes, one queue, and a finished MP4. All on your computer."],
-  hero_action: ["Выбрать видео", "Choose videos"], hero_caption: ["Бесплатно для личного использования. Без облака.", "Free for personal use. No cloud."],
-  workspace_title: ["Подготовка видео", "Prepare your videos"], queue_title: ["Очередь", "Queue"],
+  nav_process: ["Обработать видео", "Prepare a video"],
+  eyebrow: ["Подготовка видео к публикации", "Video preparation for upload"],
+  hero_first: ["Подготовь видео", "Prepare your video"], hero_second: ["к TikTok.", "for TikTok."],
+  hero_description: ["Добавь видео, выбери Stealth или Max и забери готовый MP4.", "Add a video, choose Stealth or Max, and get the finished MP4."],
+  workspace_title: ["Подготовить видео", "Prepare a video"], queue_title: ["Очередь", "Queue"],
   engine_check: ["Проверка ffmpeg", "Checking ffmpeg"], engine_ready: ["Готов к обработке", "Ready to process"],
   engine_missing: ["Нужен ffmpeg", "ffmpeg required"], engine_offline: ["Нет соединения", "Disconnected"],
   engine_restart: ["Перезапусти сервер", "Restart the server"],
   engine_restart_help: ["Работает прежний сервер. Закрой его окно и запусти start.bat заново.", "The previous server is running. Close its window and run start.bat again."],
   engine_help: ["Для обработки установи ffmpeg: winget install Gyan.FFmpeg", "Install ffmpeg to process videos: winget install Gyan.FFmpeg"],
-  retry: ["Повторить", "Retry"], btn_files: ["Добавить файлы", "Add files"], btn_folder: ["Папка", "Folder"],
-  empty_title: ["Перетащи видео сюда", "Drop your videos here"], empty_hint: ["или нажми, чтобы выбрать файлы", "or click to choose files"],
-  modes_title: ["Режим обработки", "Processing mode"],
-  mode_stealth_short: ["Обычная подготовка", "Regular preparation"], mode_max_short: ["Больше внимания деталям", "More attention to detail"],
-  mode_stealth_note: ["Рабочий метод с фиктивными аудиосэмплами. Подготовка H.264 под TikTok с обычной скоростью кодирования.", "The ghost sample method. H.264 preparation for TikTok with standard encoding speed."],
-  mode_max_note: ["Тот же метод Stealth, более тщательное кодирование. Медленнее, с большим запасом качества и переменным битрейтом.", "The Stealth method with more thorough encoding. Slower, with more quality headroom and variable bitrate."],
+  retry: ["Повторить", "Retry"], btn_files: ["Добавить ещё", "Add more"], btn_folder: ["Или выбери папку", "Or choose a folder"],
+  empty_title: ["Перетащи видео сюда", "Drop your videos here"],
+  modes_title: ["Выбранный режим", "Selected mode"], mode_choice: ["Режим обработки", "Processing mode"], settings: ["Настройки", "Settings"],
+  mode_stealth_note: ["Stealth перекодирует видео в H.264 Main с обычной скоростью. Размер и частота кадров не увеличиваются.", "Stealth encodes H.264 Main at standard speed. Resolution and frame rate are never increased."],
+  mode_max_note: ["Max использует более тщательное кодирование с переменным битрейтом. Обработка дольше, файл может стать больше.", "Max uses more thorough encoding with variable bitrate. Processing takes longer, and the file may be larger."],
   size_label: ["Размер", "Dimensions"], fps_label: ["Частота", "Frame rate"], up_to: ["до {value}", "up to {value}"],
-  ghost_name: ["Фиктивные аудиосэмплы", "Ghost audio samples"], details_label: ["Что меняется в файле", "What changes in the file"],
+  ghost_name: ["Фиктивные аудиосэмплы", "Ghost audio samples"],
   ghost_note: ["В одной аудиодорожке число сэмплов увеличивается в 10 раз. Реальный звук сохраняется. Фиктивный хвост может влиять на совместимость с плеерами.", "The sample count grows tenfold in a single audio track. Real audio is preserved. The ghost tail may affect player compatibility."],
-  output_label: ["Результат рядом с исходником", "Output next to the source"], btn_clear: ["Очистить", "Clear"], btn_cancel: ["Отменить", "Cancel"],
-  btn_start: ["Обработать видео", "Process videos"], btn_start_count: ["Обработать ({n})", "Process ({n})"], btn_working: ["Обработка", "Processing"],
+  btn_clear: ["Очистить", "Clear"], btn_cancel: ["Отменить", "Cancel"],
+  btn_choose: ["Выбрать видео", "Choose videos"], btn_start_count: ["Обработать ({n})", "Process ({n})"], btn_working: ["Обработка", "Processing"],
   btn_starting: ["Запуск", "Starting"], btn_open: ["Открыть папку", "Open folder"],
-  guide_title: ["От исходника до публикации", "From source to upload"],
-  guide_one_title: ["Добавь исходники", "Add your source files"],
-  guide_one: ["Один файл, несколько роликов или вся папка. Исходники остаются без изменений.", "One file, several clips, or a whole folder. Your originals stay untouched."],
-  guide_two_title: ["Выбери свой режим", "Choose your mode"],
-  guide_two: ["Stealth для обычной подготовки. Max для более тщательного кодирования: дольше, с большим запасом качества.", "Stealth for regular preparation. Max for more thorough encoding: slower, with extra quality headroom."],
-  guide_three_title: ["Забери готовый MP4", "Pick up the finished MP4"],
-  guide_three: ["Открой папку с результатом и публикуй. Итоговое разрешение и FPS после загрузки выбирает TikTok.", "Open the output folder and upload. TikTok chooses the final resolution and frame rate after upload."],
-  local_processing: ["Обработка на этом компьютере", "Processed on this computer"], footer_note: ["Без облака и телеметрии", "No cloud or telemetry"],
+  guide_one_title: ["Для обычной подготовки", "For regular preparation"],
+  guide_one: ["Текущий метод с фиктивными аудиосэмплами. Подготовка видео до 1080p60.", "The current ghost sample method. Video preparation up to 1080p60."],
+  guide_two_title: ["Когда можно подождать", "When you can wait a little"],
+  guide_two: ["Тот же метод с более тщательным кодированием. Обработка дольше, файл может стать больше.", "The same method with more thorough encoding. Processing takes longer, and the file may be larger."],
+  local_processing: ["Обработка на твоём компьютере", "Processed on your computer"], footer_note: ["Бесплатно для личного использования", "Free for personal use"],
   drop_now: ["Отпусти, чтобы добавить", "Drop to add videos"],
   queued: ["В очереди", "Queued"], probing: ["Анализ", "Analyzing"], processing: ["Кодирование", "Encoding"],
   done: ["Готово", "Done"], error: ["Ошибка", "Error"], cancelled: ["Отменено", "Cancelled"],
@@ -42,7 +37,7 @@ const messages = {
   upload: ["Загрузка {i} из {n}: {name}", "Uploading {i} of {n}: {name}"],
   no_video: ["Нет поддерживаемых видеофайлов. Выбери MP4, MOV, MKV или WEBM.", "No supported videos. Choose MP4, MOV, MKV, or WEBM."],
   no_folder: ["В выбранной папке нет видео. Выбери другую папку.", "No videos in this folder. Choose another folder."],
-  failed: ["Не удалось выполнить {operation}: {reason}", "Could not complete {operation}: {reason}"],
+  failed: ["{operation}: {reason}", "{operation}: {reason}"],
   probe_missing: ["Сервер не вернул данные файла", "The server returned no file data"],
   job_connection: ["Не удалось обновить прогресс: {reason}. Обработка может продолжаться; восстанавливаю связь.", "Could not refresh progress: {reason}. Processing may still be running; reconnecting."],
   job_missing: ["Сервер больше не хранит задачу {job}. Проверь папку результата перед повторным запуском. Очередь сохранена.", "The server no longer has job {job}. Check the output folder before retrying. Your queue is preserved."],
@@ -50,7 +45,7 @@ const messages = {
   retry_start: ["Повторить запуск", "Retry start"],
   server_restarted: ["Сервер был перезапущен. Итог прошлого запуска неизвестен: проверь папку результата перед новой обработкой.", "The server restarted. The previous outcome is unknown: check the output folder before processing again."],
   warning_mask_incomplete: ["Подпись кодировщика осталась в контейнере", "The encoder signature remains in the container"],
-  close: ["Закрыть", "Close"], saved_job: ["Не удалось восстановить задачу: {reason}", "Could not restore the job: {reason}"],
+  close: ["Закрыть", "Close"], saved_job: ["Не удалось восстановить задачу: {reason}", "Could not restore the job: {reason}"], result_location: ["Где сохранён файл", "File location"],
 };
 let language = localStorage.getItem("lang") || (navigator.language.startsWith("ru") ? "ru" : "en");
 if (!["ru", "en"].includes(language)) language = "ru";
@@ -100,6 +95,9 @@ function applyLanguage(value) {
   document.querySelectorAll("[data-i18n]").forEach(node => text(node, t(node.dataset.i18n)));
   document.querySelectorAll("[data-lang]").forEach(button => { const active = button.dataset.lang === value; button.classList.toggle("on", active); button.setAttribute("aria-pressed", String(active)); });
   $("#notice-close").setAttribute("aria-label", t("close"));
+  $("#settings-close").setAttribute("aria-label", t("close"));
+  $("#modes").setAttribute("aria-label", t("mode_choice"));
+  $("#queue").setAttribute("aria-label", t("queue_title"));
   text($("#engine-text"), t(state.engine ? "engine_ready" : $("#engine").dataset.status || "engine_check"));
   renderModes(); render();
 }
@@ -139,7 +137,7 @@ function renderModes() {
     container.replaceChildren(...state.modes.map(mode => {
       const button = element("button", "mode");
       button.type = "button"; button.dataset.mode = mode.id; button.setAttribute("role", "radio");
-      button.append(element("strong", "mode-title", mode.label), element("small", "mode-subtitle"));
+      button.textContent = mode.label;
       return button;
     }));
   }
@@ -149,7 +147,6 @@ function renderModes() {
     button.classList.toggle("on", mode.id === state.mode);
     button.setAttribute("aria-checked", String(mode.id === state.mode)); button.tabIndex = mode.id === state.mode ? 0 : -1;
     button.disabled = state.running || state.starting || !!state.pending;
-    text(button.querySelector("small"), t(`mode_${mode.id}_short`));
   });
   container.style.setProperty("--mode-index", String(Math.max(0, state.modes.findIndex(mode => mode.id === state.mode))));
   const selected = state.modes.find(mode => mode.id === state.mode);
@@ -202,25 +199,29 @@ function render() {
     text(p.name, item.name);
     text(p.status, item.status === "processing" ? `${t(item.progress >= .96 ? "patching" : "processing")} ${Math.round((item.progress || 0) * 100)}%` : t(item.status));
     const before = fileSpec(item.before || item.info), after = fileSpec(item.after);
-    text(p.meta, after ? `${before} / ${after}` : before);
+    text(p.meta, after || before);
     p.remove.hidden = state.running || state.starting || !!state.pending; p.remove.setAttribute("aria-label", `${t("remove")}: ${item.name}`);
     p.bar.hidden = item.status !== "processing"; p.fill.style.width = `${Math.round((item.progress || 0) * 100)}%`;
     p.error.hidden = item.status !== "error"; text(p.summary, t("show_error")); text(p.detail, item.message || "");
     p.warning.hidden = !item.warning; text(p.warning, item.warning ? t(`warning_${item.warning}`) : "");
   }
-  $("#empty").hidden = state.running; $("#empty").classList.toggle("compact", state.queue.length > 0);
+  $("#empty").hidden = state.queue.length > 0;
+  $("#queue-head").hidden = state.queue.length === 0;
   const locked = state.running || state.starting || !!state.pending;
-  for (const id of ["#btn-files", "#btn-folder", "#hero-add", "#empty"]) $(id).disabled = locked;
+  for (const id of ["#btn-files", "#btn-folder"]) $(id).disabled = locked;
   $("#ghost").disabled = locked;
   $("#modes").querySelectorAll("button").forEach(button => { button.disabled = locked; });
   const pending = state.queue.filter(item => restartable.has(item.status)).length;
-  $("#btn-start").disabled = state.running || state.starting || !state.engine || (!pending && !state.pending) || state.uploading;
-  text($("#btn-start span"), t(state.starting ? "btn_starting" : state.running ? "btn_working" : state.pending ? "retry_start" : pending ? "btn_start_count" : "btn_start", { n: pending }));
+  const adding = !pending && !state.pending && !state.running && !state.starting;
+  $("#btn-start").dataset.action = adding ? "add" : "process";
+  $("#btn-start").disabled = state.running || state.starting || (!adding && !state.engine) || state.uploading || state.queue.some(item => item.status === "probing");
+  text($("#btn-start span"), t(state.starting ? "btn_starting" : state.running ? "btn_working" : state.pending ? "retry_start" : pending ? "btn_start_count" : "btn_choose", { n: pending }));
+  $("#btn-clear").hidden = !state.queue.length && !state.running;
   $("#btn-clear").disabled = state.starting || (!state.queue.length && !state.running);
   $("#btn-clear").classList.toggle("danger", state.running || !!state.pending);
   text($("#btn-clear span"), t(state.running || state.pending ? "btn_cancel" : "btn_clear"));
   const completed = state.queue.filter(item => item.status === "done");
-  $("#result").hidden = state.running || !state.queue.length || state.queue.some(item => ["queued", "probing"].includes(item.status));
+  $("#result").hidden = state.running || !completed.length || state.queue.some(item => ["queued", "probing"].includes(item.status));
   text($("#result-text"), completed.length ? t("result", { n: completed.length }) : t("result_none"));
   state.out = completed.at(-1)?.dst || ""; text($("#foot-out"), state.out); $("#btn-open").hidden = !state.out;
   $("#jobline").hidden = !state.running;
@@ -369,9 +370,13 @@ $("#modes").addEventListener("keydown", event => {
   const next = event.key === "Home" ? 0 : event.key === "End" ? count - 1 : (index + (["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 1) + count) % count;
   selectMode(state.modes[next].id); $("#modes .on").focus();
 });
-for (const id of ["#btn-files", "#empty", "#hero-add"]) $(id).addEventListener("click", event => browse("files", event.currentTarget));
+$("#btn-files").addEventListener("click", event => browse("files", event.currentTarget));
 $("#btn-folder").addEventListener("click", event => browse("folder", event.currentTarget));
-$("#btn-start").addEventListener("click", () => start()); $("#btn-clear").addEventListener("click", clearOrCancel);
+$("#btn-start").addEventListener("click", event => {
+  if (event.currentTarget.dataset.action === "add") void browse("files", event.currentTarget);
+  else void start();
+});
+$("#btn-clear").addEventListener("click", clearOrCancel);
 $("#btn-open").addEventListener("click", async () => { try { await request("/api/reveal", { path: state.out }); } catch (error) { report("/api/reveal", error); } });
 $("#btn-reconnect").addEventListener("click", checkEngine); $("#notice-close").addEventListener("click", () => showNotice());
 let dragDepth = 0;
@@ -379,7 +384,14 @@ window.addEventListener("dragenter", event => { event.preventDefault(); dragDept
 window.addEventListener("dragover", event => event.preventDefault());
 window.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $("#drop-veil").hidden = true; });
 window.addEventListener("drop", event => { event.preventDefault(); dragDepth = 0; $("#drop-veil").hidden = true; uploadFiles(event.dataTransfer?.files || []); });
-document.addEventListener("keydown", event => { if (event.key === "Escape") { showNotice(); dragDepth = 0; $("#drop-veil").hidden = true; } });
+$("#btn-settings").addEventListener("click", () => $("#settings-dialog").showModal());
+$("#settings-close").addEventListener("click", () => $("#settings-dialog").close());
+$("#settings-dialog").addEventListener("click", event => {
+  if (event.target !== event.currentTarget) return;
+  const bounds = event.currentTarget.getBoundingClientRect();
+  if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) event.currentTarget.close();
+});
+document.addEventListener("keydown", event => { if (event.key === "Escape" && !$("#settings-dialog").open) { showNotice(); dragDepth = 0; $("#drop-veil").hidden = true; } });
 try {
   const pending = JSON.parse(sessionStorage.getItem("pending-job") || "null");
   if (pending?.body?.request_id && Array.isArray(pending.queue)) { state.pending = pending; state.queue = pending.queue; state.mode = pending.mode; showNotice(t("start_uncertain", { reason: "/api/process" })); }
