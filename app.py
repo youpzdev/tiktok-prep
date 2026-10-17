@@ -226,20 +226,24 @@ PROFILES = {
     },
     "max": {
         "label": "Max",
-        "max_short": _env("M_SHORT", 2160, int),
-        "max_long": _env("M_LONG", 3840, int),
-        "max_fps": _env("M_FPS", 0.0, float),      # 0 - не ограничивать
+        "recipe": "reference",
+        "video_profile": "main",
+        "scene_threshold": 40,
+        "max_short": _env("M_SHORT", 1080, int),
+        "max_long": _env("M_LONG", 1920, int),
+        "max_fps": _env("M_FPS", 60.0, float),
+        "rate_control": "crf",
         "crf": _env("M_CRF", 14, int),
         "bpp": _env("M_BPP", 0.26, float),
-        "maxrate": _env("M_MAXRATE", "120M"),
-        "bufsize": _env("M_BUFSIZE", "240M"),
+        "maxrate": _env("M_MAXRATE", "40M"),
+        "bufsize": _env("M_BUFSIZE", "80M"),
         "preset": _env("M_PRESET", "slow"),
         "refs": _env("M_REFS", 4, int),
-        "level": _env("M_LEVEL", ""),              # пусто - уровень выбирает x264
+        "level": _env("M_LEVEL", "5.2"),
         "audio_bitrate": _env("M_ABR", "320k"),
-        "reencode": _env("M_REENCODE", "auto"),
-        "x264_params": _env("M_X264", ""),
-        "footer": False,
+        "reencode": "always",
+        "x264_params": _env("M_X264", "weightb=0:chroma-qp-offset=2"),
+        "footer": True,
     },
 }
 DEFAULT_MODE = _env("MODE", "stealth")
@@ -434,7 +438,9 @@ def build_reencode_command(src: str, dst: str, info: dict, profile: dict):
             "-sc_threshold", str(profile.get("scene_threshold", 0))]
     if reference:
         rate, maxrate, bufsize = reference_rates(info, profile)
-        cmd += ["-b:v", rate, "-r", f"{fps_out:.6f}", "-bf", "3",
+        cmd += (["-crf", str(profile["crf"])] if profile.get("rate_control") == "crf"
+                else ["-b:v", rate])
+        cmd += ["-r", f"{fps_out:.6f}", "-bf", "3",
                 "-bsf:v", REFERENCE_SEI_FILTER, "-metadata:s:v:0", "encoder=Lavc libx264"]
     else:
         cmd += target_rate_args(info, profile)
@@ -598,6 +604,55 @@ def process_job(job_id: str):
         item["status"] = "done"
     job["status"] = "cancelled" if job.get("cancelled") else "done"
 
+
+def start_job_request(data):
+    if not isinstance(data, dict):
+        return {"error": "неверное тело запроса обработки"}, 400
+    request_id = data.get("request_id")
+    if "request_id" in data:
+        if not isinstance(request_id, str) or not re.fullmatch(r"[0-9a-fA-F]{32}", request_id):
+            return {"error": "request_id должен содержать 32 шестнадцатеричных символа"}, 400
+        request_id = request_id.lower()
+    declared = json.dumps({key: data[key] for key in ("paths", "mode", "ghost", "inflate") if key in data},
+                          sort_keys=True, separators=(",", ":")) if request_id else None
+    with JOBS_LOCK:
+        previous = JOBS.get(request_id) if request_id else None
+        if previous:
+            if previous.get("_request_payload") != declared:
+                return {"error": "request_id уже используется с другими параметрами обработки"}, 409
+            return {"job": request_id}, 200
+        refresh_binaries()
+        if not FFMPEG or not FFPROBE:
+            return {"error": "ffmpeg не найден"}, 400
+        paths = [p for p in data.get("paths", []) if os.path.isfile(p)]
+        if not paths:
+            return {"error": "нет файлов"}, 400
+        mode = data.get("mode") or DEFAULT_MODE
+        if mode not in PROFILES:
+            return {"error": f"неизвестный режим: {mode}"}, 400
+        try:
+            inflate = max(0, min(30, int(data.get("inflate", INFLATE_DEFAULT))))
+        except (TypeError, ValueError):
+            inflate = INFLATE_DEFAULT
+        try:
+            ghost = max(0, min(30, int(data.get("ghost", GHOST_DEFAULT))))
+        except (TypeError, ValueError):
+            ghost = GHOST_DEFAULT
+        job_id = request_id or uuid.uuid4().hex[:12]
+        job = {
+            "status": "running",
+            "mode": mode,
+            "inflate": inflate,
+            "ghost": ghost,
+            "files": [{"src": p, "name": os.path.basename(p),
+                       "status": "queued", "progress": 0.0} for p in paths],
+        }
+        if request_id:
+            job["_request_payload"] = declared
+        JOBS[job_id] = job
+    threading.Thread(target=process_job, args=(job_id,), daemon=True).start()
+    return {"job": job_id}, 200
+
 # ---------------------------------------------------------------- file dialogs
 
 DIALOG_SCRIPT = r"""
@@ -663,6 +718,7 @@ class Handler(BaseHTTPRequestHandler):
             refresh_binaries()
             return self.send_json({
                 "app": SERVER_SIGNATURE,
+                "instance_id": SERVER_INSTANCE,
                 "ffmpeg": bool(FFMPEG), "ffprobe": bool(FFPROBE),
                 "version": ffmpeg_version(), "ffmpeg_path": FFMPEG,
                 "default_mode": DEFAULT_MODE,
@@ -740,37 +796,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"path": str(dst)})
 
         if path == "/api/process":
-            refresh_binaries()
-            if not FFMPEG or not FFPROBE:
-                return self.send_json({"error": "ffmpeg не найден"}, 400)
-            data = self.read_json()
-            paths = [p for p in data.get("paths", []) if os.path.isfile(p)]
-            if not paths:
-                return self.send_json({"error": "нет файлов"}, 400)
-            mode = data.get("mode") or DEFAULT_MODE
-            if mode not in PROFILES:
-                return self.send_json({"error": f"неизвестный режим: {mode}"}, 400)
-            try:
-                inflate = max(0, min(30, int(data.get("inflate", INFLATE_DEFAULT))))
-            except (TypeError, ValueError):
-                inflate = INFLATE_DEFAULT
-            try:
-                ghost = max(0, min(30, int(data.get("ghost", GHOST_DEFAULT))))
-            except (TypeError, ValueError):
-                ghost = GHOST_DEFAULT
-            job_id = uuid.uuid4().hex[:12]
-            job = {
-                "status": "running",
-                "mode": mode,
-                "inflate": inflate,
-                "ghost": ghost,
-                "files": [{"src": p, "name": os.path.basename(p),
-                           "status": "queued", "progress": 0.0} for p in paths],
-            }
-            with JOBS_LOCK:
-                JOBS[job_id] = job
-            threading.Thread(target=process_job, args=(job_id,), daemon=True).start()
-            return self.send_json({"job": job_id})
+            response, status = start_job_request(self.read_json())
+            return self.send_json(response, status)
 
         if path == "/api/cancel":
             data = self.read_json()
@@ -804,6 +831,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 SERVER_SIGNATURE = "tiktok-prep-tool"
+SERVER_INSTANCE = uuid.uuid4().hex
 
 
 def port_in_use(port: int) -> bool:
