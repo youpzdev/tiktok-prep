@@ -24,7 +24,7 @@ class MaxPipelineTests(unittest.TestCase):
     def test_max_always_reencodes_with_reference_profile(self):
         command = self.command()
         for flag, expected in (("-c:v", "libx264"), ("-profile:v", "main"),
-                               ("-level", "5.2"), ("-preset", "slow"), ("-refs", "4"),
+                               ("-level", "6.0"), ("-preset", "slow"), ("-refs", "4"),
                                ("-bsf:v", app.REFERENCE_SEI_FILTER)):
             self.assertIn(flag, command)
             self.assertEqual(command[command.index(flag) + 1], expected)
@@ -35,15 +35,17 @@ class MaxPipelineTests(unittest.TestCase):
         self.assertIn("-crf", command)
         self.assertEqual(command[command.index("-crf") + 1], "14")
         self.assertNotIn("-b:v", command)
-        self.assertEqual(command[command.index("-maxrate") + 1], "40M")
-        self.assertEqual(command[command.index("-bufsize") + 1], "80M")
+        self.assertEqual(command[command.index("-maxrate") + 1], "240M")
+        self.assertEqual(command[command.index("-bufsize") + 1], "240M")
 
     def test_max_limits_resolution_and_fps_without_upscale(self):
         for width, height, fps, scale, expected_fps in (
-                (2160, 3840, 120, "scale=1080:1920", 60),
-                (3840, 2160, 120, "scale=1920:1080", 60),
+                (2160, 3840, 120, None, 120),
+                (3840, 2160, 120, None, 120),
+                (4320, 7680, 240, "scale=2160:3840", 120),
+                (7680, 4320, 240, "scale=3840:2160", 120),
                 (720, 1280, 24, None, 24),
-                (1920, 1920, 59.94, "scale=1080:1080", 59.94)):
+                (1920, 1920, 59.94, None, 59.94)):
             with self.subTest(width=width, height=height, fps=fps):
                 self.info.update(width=width, height=height, fps=fps, frames=fps * 2)
                 command = self.command()
@@ -99,8 +101,8 @@ class MaxPipelineTests(unittest.TestCase):
                              audio_count * 10)
             self.assertEqual(data[tail:], app.mp4mask.GHOST_SAMPLE_BYTES * audio_count * 9)
             info = app.probe(str(output))
-            self.assertEqual((info["width"], info["height"], info["fps"]), (128, 96, 60.0))
-            self.assertEqual(info["frames"], 60)
+            self.assertEqual((info["width"], info["height"], info["fps"]), (128, 96, 120.0))
+            self.assertEqual(info["frames"], 120)
             for mapping in ("0:v:0", "0:a:0"):
                 decoded = self.run_ffmpeg(["-i", str(encoded), "-map", mapping, "-f", "null", "-"])
                 self.assertEqual(decoded.stderr, b"")
@@ -111,7 +113,7 @@ class MaxPipelineTests(unittest.TestCase):
             ], capture_output=True, text=True, encoding="utf-8", check=True).stdout)["streams"]
             video, audio = streams
             self.assertEqual(video["profile"], "Main")
-            self.assertEqual(video["level"], 52)
+            self.assertEqual(video["level"], 60)
             self.assertAlmostEqual(float(video["start_time"]), float(audio["start_time"]), delta=0.03)
             self.assertAlmostEqual(float(video["duration"]), float(audio["duration"]), delta=0.03)
             masked_streams = json.loads(subprocess.run([
@@ -135,7 +137,7 @@ class MaxPipelineTests(unittest.TestCase):
             self.assertEqual(len(list(_find(tree, b"trak"))), 1)
             self.assertEqual(item["patch"]["ghost_samples"], 0)
 
-    def test_real_downscale_and_frame_limit(self):
+    def test_real_above_1080p60_is_preserved(self):
         with tempfile.TemporaryDirectory(prefix="max-scale-") as directory:
             source = Path(directory) / "source.mp4"
             output = Path(directory) / "encoded.mp4"
@@ -146,7 +148,46 @@ class MaxPipelineTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
             info = app.probe(str(output))
             self.assertEqual((info["width"], info["height"], info["fps"], info["frames"]),
-                             (1920, 1080, 60.0, 15))
+                             (2048, 1152, 120.0, 30))
+
+
+    def test_real_4k120_job_preserves_frames_and_single_ghost_track(self):
+        with tempfile.TemporaryDirectory(prefix="max-4k120-") as directory:
+            source = Path(directory) / "source.mp4"
+            self.run_ffmpeg(["-f", "lavfi", "-i", "testsrc2=size=3840x2160:rate=120:duration=0.25",
+                             "-f", "lavfi", "-i", "sine=sample_rate=48000:duration=0.25",
+                             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "10",
+                             "-c:a", "aac", "-y", str(source)])
+            encoded = Path(directory) / "encoded.mp4"
+            original_mask = app.mp4mask.mask_reference
+            def save_encoded(src, dst, **kwargs):
+                shutil.copyfile(src, encoded)
+                return original_mask(src, dst, **kwargs)
+            item = {"src": str(source), "status": "queued"}
+            with patch.dict(app.JOBS, {"4k-test": {"mode": "max", "ghost": 10, "files": [item]}}), patch.object(
+                    app.mp4mask, "mask_reference", side_effect=save_encoded):
+                app.process_job("4k-test")
+            self.assertEqual(item["status"], "done", item)
+            info = app.probe(item["dst"])
+            self.assertEqual((info["width"], info["height"], info["fps"], info["frames"]),
+                             (3840, 2160, 120.0, 30))
+            before_data, before, _ = read_tree(encoded)
+            data, tree, _ = read_tree(item["dst"])
+            self.assertEqual(len(list(_find(tree, b"trak"))), 2)
+            for kind in (b"vide", b"soun"):
+                previous, current = track(before, kind), track(tree, kind)
+                count = _stsz_info(_child(sample_table(previous), b"stsz"))[1]
+                self.assertEqual(packets(before_data, previous), packets(data, current, count))
+            audio_count = _stsz_info(_child(sample_table(track(before, b"soun")), b"stsz"))[1]
+            self.assertEqual(_stsz_info(_child(sample_table(track(tree, b"soun")), b"stsz"))[1], audio_count * 10)
+            self.assertEqual(self.run_ffmpeg(["-i", item["dst"], "-map", "0:v:0", "-f", "null", "-"]).stderr, b"")
+            streams = json.loads(subprocess.run([
+                app.FFPROBE, "-v", "quiet", "-show_streams", "-of", "json", str(encoded)
+            ], capture_output=True, text=True, encoding="utf-8", check=True).stdout)["streams"]
+            video, audio = streams
+            self.assertEqual(video["level"], 60)
+            self.assertAlmostEqual(float(video["start_time"]), float(audio["start_time"]), delta=0.03)
+            self.assertAlmostEqual(float(video["duration"]), float(audio["duration"]), delta=0.03)
 
 
 if __name__ == "__main__":
