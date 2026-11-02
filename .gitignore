@@ -1,48 +1,23 @@
-# ---------------------------------------------------------------- Claude / IDE
-.claude/
-.agents/
-.repowise/
-.vscode/
-.idea/
-*.code-workspace
-
-# ---------------------------------------------------------------- Python
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-env/
-
-# ---------------------------------------------------------------- рабочие папки
-# видео, залитые через браузер, и результаты обработки
-incoming/
-tiktok_ready/
-logs/
-release/
-
-# ffmpeg, если положен вручную рядом с приложением
-bin/
-
-# ---------------------------------------------------------------- медиа
-# исходники и результаты в репозитории не нужны (GitHub режет файлы >100 МБ).
-# Картинки (в т.ч. static/logo-v2.png) не трогаем - они часть сайта.
-*.mp4
-*.mov
-*.mkv
-*.avi
-*.webm
-*.m4v
-*.wmv
-*.flv
-*.ts
-*.mts
-*.m2ts
-*.3gp
-*.mpg
-*.mpeg
-
-# ---------------------------------------------------------------- Windows / OS
-Thumbs.db
-desktop.ini
-$RECYCLE.BIN/
-*.tmp
+/*
+!/.gitignore
+!/.gitattributes
+!/LICENSE
+!/app.py
+!/mp4boxes.py
+!/mp4mask.py
+!/start.bat
+!/static/
+/static/*
+!/static/app.js
+!/static/index.html
+!/static/style.css
+!/static/motion.js
+!/static/ribbon.js
+!/static/favicon.svg
+!/static/logo.svg
+!/static/fonts/
+/static/fonts/*
+!/static/fonts/manrope.ttf
+!/static/fonts/unbounded.ttf
+!/static/fonts/manrope-OFL.txt
+!/static/fonts/unbounded-OFL.txt
